@@ -87,6 +87,7 @@ class DisplayWorker(threading.Thread):
         self.running = False
         
         self._camera = camera
+        
         self._detections_queue = detections_queue
 
         self._obb = obb
@@ -98,8 +99,8 @@ class DisplayWorker(threading.Thread):
         
     def run(self):
         self.running = True
-        self.display_logger.info("Dsiplay Thread start")
-       
+        self.display_logger.info("Display Thread start")
+        width, height = self._camera.width, self._camera.height
         while self.running:
             try:
                 frame = self._camera.get_latest_frame()
@@ -114,11 +115,11 @@ class DisplayWorker(threading.Thread):
             detections = self._detections_queue.get()
                 
             if not self._obb:
-                color_annotated = draw_detection(color_image, detections, self._limit_box)
+                color_annotated = draw_detection(color_image, detections, self._limit_box, camera_width=width, camera_height=height)
                 
 
             if self._obb:
-                color_annotated = draw_detection_obb(color_image, detections, self._limit_box)
+                color_annotated = draw_detection_obb(color_image, detections, self._limit_box, camera_width=width, camera_height=height)
             
             if self._depth:
                 depth_colored = colorize_depth(depth_frame=depth_frame, depth_scale=self._camera.depth_scale)

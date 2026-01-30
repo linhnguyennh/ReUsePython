@@ -12,10 +12,9 @@ from src.vision.visual_controller import tf_camera_to_gripper
 def detection_xyz(model: YOLO, color_frame, depth_frame, intrinsics, img_width, img_height, **yolo_args):
 
     color_image = np.asanyarray(color_frame.get_data())
-    with torch.inference_mode():
-        results = model(color_image, **yolo_args)[0]
+    results = model(color_image, **yolo_args)[0]
 
-
+    print(results.boxes.xyxy)
     detections = []
     if results.boxes:
         for box in results.boxes:
@@ -26,8 +25,8 @@ def detection_xyz(model: YOLO, color_frame, depth_frame, intrinsics, img_width, 
             
             cx = int((x1 + x2) / 2)
             cy = int((y1 + y2) / 2)
-            cx = max(0, min(cx, img_width - 1))
-            cy = max(0, min(cy, img_height - 1))
+            # cx = max(0, min(cx, img_width - 1))
+            # cy = max(0, min(cy, img_height - 1))
 
             # Depth
             depth = depth_frame.get_distance(cx, cy)
@@ -66,12 +65,12 @@ def detection_xyz_obb(
 ):
     color_image = np.asanyarray(color_frame.get_data())
 
-    with torch.inference_mode():
-        results = model(color_image, **yolo_args)[0]
+
+    results = model(color_image, **yolo_args)[0]
 
     detections = []
-
     if not results.obb:
+        print("Hello")
         return detections
 
     for box in results.obb:
@@ -152,7 +151,7 @@ def colorize_depth(depth_frame, depth_scale, min_depth=0.2, max_depth=2.0):
     return cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
 
 
-def draw_detection(color_image, detections, limit_box = True, camera_width = 640, camera_height = 360, margin_x = 400, margin_y = 250):
+def draw_detection(color_image, detections, limit_box = True, camera_width = 640, camera_height = 360, margin_x = 200, margin_y = 125):
     for det in detections:
         x1, y1, x2, y2 = det["bbox"]
         cls_id = str(det["class_id"])
@@ -175,12 +174,12 @@ def draw_detection(color_image, detections, limit_box = True, camera_width = 640
         
     #Limit
     if limit_box:
-        cv2.rectangle(color_image, (camera_width - margin_x, camera_height - margin_y), (camera_width + margin_x, camera_height + margin_y), (0, 0, 255), 2)
-        cv2.circle(color_image,(camera_width, camera_height), 2, (255,255,255))    
+        cv2.rectangle(color_image, (camera_width//2 - margin_x, camera_height//2 - margin_y), (camera_width//2 + margin_x, camera_height//2 + margin_y), (0, 0, 255), 2)
+        cv2.circle(color_image,(camera_width//2, camera_height//2), 2, (255,255,255))    
     return color_image
 
 
-def draw_detection_obb(color_image, detections, limit_box=True, camera_width = 640, camera_height = 360, margin_x = 400, margin_y = 250):
+def draw_detection_obb(color_image, detections, limit_box=True, camera_width = 640, camera_height = 360, margin_x = 200, margin_y = 125):
     for det in detections:
 
         # --- Extract core fields ---
@@ -289,8 +288,8 @@ def draw_detection_obb(color_image, detections, limit_box=True, camera_width = 6
 
     # --- Draw limit box if enabled ---
     if limit_box:
-        cv2.rectangle(color_image, (camera_width - margin_x, camera_height - margin_y), (camera_width + margin_x, camera_height + margin_y), (0, 0, 255), 2)
-        cv2.circle(color_image, (camera_width, camera_height), 2, (255, 255, 255), -1)
+        cv2.rectangle(color_image, (camera_width//2 - margin_x, camera_height//2 - margin_y), (camera_width//2 + margin_x, camera_height//2 + margin_y), (0, 0, 255), 2)
+        cv2.circle(color_image, (camera_width//2, camera_height//2), 2, (255, 255, 255), -1)
 
     return color_image
 

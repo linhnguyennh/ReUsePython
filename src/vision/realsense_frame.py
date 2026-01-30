@@ -50,7 +50,7 @@ def realsense_get_frame(pipeline):
         pipeline (rs.pipeline) : started pipeline
 
     Returns:
-        depth_Frame (np.ndarray) : depth frame of shape (H,W) uint16
+        depth_Frame (np.ndarray) : depth frame of shape (H,W) uint16;
         color_frame (np.ndarray) : RGB color frame of shape (H,W,3) uint8
     """
 
