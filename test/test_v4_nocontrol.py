@@ -28,19 +28,23 @@ def main():
     robot_url = "opc.tcp://192.168.0.20:16448"
     postcp_index = 0
     # --- Start camera and model ---
-    camera = RealSenseStream(fps=30, width=1280, height=720)
+    camera = RealSenseStream(fps=30, width=640, height=480)
     camera.start()
 
-    model = YOLO(r"models\focus1\retrain_obb_BIGMAP_251203\train2\weights\morrow_obb_251203.pt")
+    model = YOLO(r"models\focus1\retrain_obb_BIGMAP_260108\train\weights\morrow_obb_260108.pt")
+    #model = YOLO(r"models\focus1\retrain_obb_BIGMAP_251203\train2\weights\morrow_obb_251203.pt")
     #model = YOLO(r"models\focus1\retrain\train3\weights\best_morrow_251020.pt")
 
+    
+    #model = YOLO(r"models\focus1\retrain_obb_BIGMAP_251203\train2\weights\morrow_obb_251203.onnx")
     detection_worker = DetectionWorker(
         model=model,
         camera=camera,
         max_queue_size=1,
         obb=True,
         conf=0.85,
-        imgsz=640
+        imgsz=(480,640),
+        task='obb'
     )
     display_worker = DisplayWorker(
         camera=camera,

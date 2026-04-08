@@ -76,6 +76,7 @@ def main():
             error = np.zeros(3)
             error_raw = np.zeros(3)
             angle_degree = 0
+
             while display_worker.running:
                 
                 
@@ -128,11 +129,18 @@ def main():
 
                 state_job = plc.get_state_job()
                 
+                ###
+                # Put error logging here:
+                # log actual error: error_xz or error[0] and error[2]
+                # log controller output: control_xz or control[0] and control[2]
+                # log magnitude: error_mag_xz
+                # log is_stable
+                ###
+
                 match state_job:
                     case s if s in [11,12,13]:
 
                         loop_start = time.time() 
-
                         if np.linalg.norm(control_xz) > DEADBAND_M:
                             #dx, dy, dz = control.tolist() #Delta xyz
                             dx, dz = control_xz.tolist()
