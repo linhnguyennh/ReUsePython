@@ -3,6 +3,8 @@ import numpy as np
 import cv2
 import sys
 
+from src.vision.realsense_frame import realsense_init, realsense_get_frame
+
 # === Board Config (must match what you printed) ===
 BOARD_COLS = 7
 BOARD_ROWS = 5
@@ -24,9 +26,13 @@ detector = cv2.aruco.CharucoDetector(board)
 max_corners = (BOARD_COLS - 1) * (BOARD_ROWS - 1)
 
 # === Setup RealSense ===
-pipeline = rs.pipeline()
-config = rs.config()
-config.enable_stream(rs.stream.color, CAM_WIDTH, CAM_HEIGHT, rs.format.bgr8, CAM_FPS)
+# pipeline = rs.pipeline()
+# config = rs.config()
+# config.enable_stream(rs.stream.color, CAM_WIDTH, CAM_HEIGHT, rs.format.bgr8, CAM_FPS)
+
+pipeline,_,_ = realsense_init(CAM_WIDTH, CAM_HEIGHT, CAM_FPS)
+
+
 
 print("Starting D435i...")
 try:
