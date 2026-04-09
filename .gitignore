@@ -13,3 +13,5 @@ __pycache__/
 config.py
 runs
 *.pt
+
+intrinsic_images/
