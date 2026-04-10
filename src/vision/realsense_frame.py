@@ -20,10 +20,10 @@ def realsense_init(width = 1280, height = 720, fps = 15, enable_imu = False):
     pipeline = rs.pipeline()
     config = rs.config()
 
-    # Depth
+    # Color
     config.enable_stream(rs.stream.color, width, height, rs.format.bgr8, fps) 
     
-    # Color
+    # Depth
     config.enable_stream(rs.stream.depth, width, height, rs.format.z16, fps)
 
     # Accel & Gyro
