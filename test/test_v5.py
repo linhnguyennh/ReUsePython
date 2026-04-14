@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from src.vision.realsense_stream import RealSenseStream
 from src.vision.pipeline_workers import DetectionWorker, DisplayWorker
-from src.communication.opcua_device import PLCClient, Yaskawa_YRC1000
+from src.communication.opcua.opcua_device import PLCClient, Yaskawa_YRC1000
 from src.vision.visual_controller import calc_control_val, check_stability, tf_camera_to_gripper
 
 def main():

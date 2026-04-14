@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from src.vision.realsense_stream import RealSenseStream
 from src.vision.pipeline_workers import DetectionWorker, DisplayWorker
-from src.communication.opcua_device import PLCClient, Yaskawa_YRC1000
+from src.communication.opcua.opcua_device import PLCClient, Yaskawa_YRC1000
 from src.vision.visual_controller import calc_control_val
 
 def main():
@@ -23,15 +23,11 @@ def main():
     LOOP_HZ = 20
     LOOP_DT = 1.0 / LOOP_HZ
 
-    # --- Connection URLs ---
-    plc_url = "opc.tcp://192.168.0.1:4840"
-    robot_url = "opc.tcp://192.168.0.20:16448"
-    postcp_index = 0
     # --- Start camera and model ---
     camera = RealSenseStream(fps=30, width=640, height=480)
     camera.start()
 
-    model = YOLO(r"models\focus1\retrain_obb_BIGMAP_260108\train\weights\morrow_obb_260108.pt")
+    model = YOLO(r"models\focus1\retrain_obb_BIGMAP_260108\train\weights\morrow_obb_260108.pt", task='obb')
     #model = YOLO(r"models\focus1\retrain_obb_BIGMAP_251203\train2\weights\morrow_obb_251203.pt")
     #model = YOLO(r"models\focus1\retrain\train3\weights\best_morrow_251020.pt")
 
