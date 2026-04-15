@@ -11,18 +11,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from src.vision.realsense_stream import RealSenseStream
 from src.vision.pipeline_workers import DetectionWorker, DisplayWorker
-from src.communication.opcua.opcua_device import PLCClient, Yaskawa_YRC1000
-from src.vision.visual_controller import calc_control_val
 
 def main():
-    # --- Control parameters ---
-    Kp = 0.2
-    Kd = 0.4
-    ALPHA = 0.32       # smoothing factor (0–1)
-    DEADBAND_M = 0.02  # 10 mm deadband
-    LOOP_HZ = 20
-    LOOP_DT = 1.0 / LOOP_HZ
-
     # --- Start camera and model ---
     camera = RealSenseStream(fps=30, width=640, height=480)
     camera.start()
@@ -40,7 +30,8 @@ def main():
         obb=True,
         conf=0.85,
         imgsz=(480,640),
-        task='obb'
+        task='obb',
+        device='cuda'
     )
     display_worker = DisplayWorker(
         camera=camera,
