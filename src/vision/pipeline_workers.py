@@ -20,6 +20,7 @@ class DetectionWorker(threading.Thread):
         self.model = model
         self._camera = camera
         
+        self._results_queue = Queue(maxsize=max_queue_size)
         self._detections_queue = Queue(maxsize=max_queue_size)
         self._obb = obb
 
@@ -42,6 +43,8 @@ class DetectionWorker(threading.Thread):
                 if frame is None:
                     continue
                 color_frame, depth_frame = frame
+                color_data = np.asanyarray(color_frame.get_data())
+                depth_data = np.asanyarray(depth_frame.get_data())
 
             except Empty:
                 continue
@@ -49,7 +52,7 @@ class DetectionWorker(threading.Thread):
             if not self._obb:
                 detections = detection_xyz(
                     self.model,
-                    color_frame,
+                    color_data,
                     depth_frame,
                     intrinsics=intrinsics,
                     img_width=width,
@@ -60,7 +63,7 @@ class DetectionWorker(threading.Thread):
             if self._obb:
                 detections = detection_xyz_obb(
                     self.model,
-                    color_frame,
+                    color_data,
                     depth_frame,
                     intrinsics=intrinsics,
                     img_width=width,
@@ -68,6 +71,7 @@ class DetectionWorker(threading.Thread):
                     **self.yolo_args
                 )
 
+            put_latest(self._results_queue, (color_data, depth_data, detections))
             put_latest(self._detections_queue, detections)
 
         self.det_logger.info("Detection stop")
@@ -77,18 +81,24 @@ class DetectionWorker(threading.Thread):
         self.join()
 
     @property
+    def results_queue(self):
+        return self._results_queue
+
+    @property
     def detections_queue(self):
         return self._detections_queue
 
 
 class DisplayWorker(threading.Thread):
-    def __init__(self, camera : RealSenseStream, detections_queue : Queue, obb = False, limit_box=True, depth=False):
+    def __init__(self, width: int, height: int, depth_scale: float, results_queue : Queue, obb = False, limit_box=True, depth=False):
         super().__init__(daemon=True)
         self.running = False
         
-        self._camera = camera
+        self._width = width
+        self._height = height
+        self._depth_scale = depth_scale
         
-        self._detections_queue = detections_queue
+        self._results_queue = results_queue
 
         self._obb = obb
         self._depth = depth
@@ -100,29 +110,23 @@ class DisplayWorker(threading.Thread):
     def run(self):
         self.running = True
         self.display_logger.info("Display Thread start")
-        width, height = self._camera.width, self._camera.height
         while self.running:
             try:
-                frame = self._camera.get_latest_frame()
-                if frame is None:
-                    continue
-                color_frame, depth_frame = frame
-                color_image = np.asanyarray(color_frame.get_data())
+                color_data, depth_data, detections = self._results_queue.get()
+                color_image = color_data
 
             except Empty:
                 continue
-
-            detections = self._detections_queue.get()
                 
             if not self._obb:
-                color_annotated = draw_detection(color_image, detections, self._limit_box, camera_width=width, camera_height=height)
+                color_annotated = draw_detection(color_image, detections, self._limit_box, camera_width=self._width, camera_height=self._height)
                 
 
             if self._obb:
-                color_annotated = draw_detection_obb(color_image, detections, self._limit_box, camera_width=width, camera_height=height)
+                color_annotated = draw_detection_obb(color_image, detections, self._limit_box, camera_width=self._width, camera_height=self._height)
             
             if self._depth:
-                depth_colored = colorize_depth(depth_frame=depth_frame, depth_scale=self._camera.depth_scale)
+                depth_colored = colorize_depth(depth_data, depth_scale=self._depth_scale)
                 cv2.imshow("Depth Map", depth_colored)
             cv2.imshow("YOLO Detections with XYZ coordinate", color_annotated)
             

@@ -9,9 +9,8 @@ import math
 from src.vision.visual_controller import tf_camera_to_gripper
 
 
-def detection_xyz(model: YOLO, color_frame, depth_frame, intrinsics, img_width, img_height, **yolo_args):
+def detection_xyz(model: YOLO, color_image, depth_frame, intrinsics, img_width, img_height, **yolo_args):
 
-    color_image = np.asanyarray(color_frame.get_data())
     results = model(color_image, **yolo_args)[0]
 
     print(results.boxes.xyxy)
@@ -56,16 +55,13 @@ def detection_xyz(model: YOLO, color_frame, depth_frame, intrinsics, img_width, 
 
 def detection_xyz_obb(
     model: YOLO,
-    color_frame,
+    color_image,
     depth_frame,
     intrinsics,
     img_width,
     img_height,
     **yolo_args
 ):
-    color_image = np.asanyarray(color_frame.get_data())
-
-
     results = model(color_image, **yolo_args)[0]
 
     detections = []
@@ -141,9 +137,11 @@ def detection_xyz_obb(
     return detections
 
 
-def colorize_depth(depth_frame, depth_scale, min_depth=0.2, max_depth=2.0):
-
-    depth_image = np.asanyarray(depth_frame.get_data())
+def colorize_depth(depth_data, depth_scale, min_depth=0.2, max_depth=2.0):
+    if hasattr(depth_data, 'get_data'):
+        depth_image = np.asanyarray(depth_data.get_data())
+    else:
+        depth_image = depth_data
 
     depth_m = depth_image * depth_scale
     depth_clipped = np.clip(depth_m, min_depth, max_depth)
