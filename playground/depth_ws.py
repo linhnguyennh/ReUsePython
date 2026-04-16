@@ -21,8 +21,7 @@ def test_depth_camera():
     Press 'q' to exit.
     """
     logger.info("Initializing RealSense D435i camera with depth filters...")
-    config = realsense_init(width=640, height=480, fps=30, 
-                           enable_decimation=True, enable_spatial=True, enable_temporal=True)
+    config = realsense_init(width=640, height=480, fps=30)
     logger.info("Camera initialized successfully with filters enabled")
     
     try:
