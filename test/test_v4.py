@@ -49,8 +49,10 @@ def main():
         imgsz=640
     )
     display_worker = DisplayWorker(
-        camera=camera,
-        detections_queue=detection_worker.detections_queue,
+        width=camera.width,
+        height=camera.height,
+        depth_scale=camera.depth_scale,
+        results_queue=detection_worker.results_queue,
         obb=is_obb,
         limit_box=True
     )
