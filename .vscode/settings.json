@@ -1,3 +1,7 @@
 {
-    "python.defaultInterpreterPath": "c:\\Users\\lin40269\\Desktop\\Linh (Desktop)\\01_Python\\realsense\\.venv\\Scripts\\python.exe"
+    "python.defaultInterpreterPath": "c:\\Users\\lin40269\\Desktop\\Linh (Desktop)\\01_Python\\realsense\\.venv\\Scripts\\python.exe",
+    "python.analysis.reportUnknownMemberType": "none",
+    "python.analysis.reportUnknownVariableType": "none",
+    "python.analysis.diagnosticSeverityOverrides": {
+    "reportAttributeAccessIssue": "none"}
 }

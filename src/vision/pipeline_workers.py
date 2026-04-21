@@ -15,31 +15,38 @@ from ..utils.queue_helper import put_latest
 # -------------------------
 
 class DetectionWorker(threading.Thread):
-    def __init__(self, model, camera: RealSenseStream, max_queue_size=1, obb = False, **yolo_args):
+    def __init__(self, model, width, height, depth_intrinsics, frame_queue : Queue, max_queue_size=1, obb = False, **yolo_args):
         super().__init__(daemon=True)
         self.model = model
-        self._camera = camera
         
         self._results_queue = Queue(maxsize=max_queue_size)
         self._detections_queue = Queue(maxsize=max_queue_size)
         self._obb = obb
 
         self.running = False
+        
+        self._width = width
+        self._height = height
+        self._depth_intrinsics = depth_intrinsics
+
+        self._frame_queue = frame_queue
+
         self.yolo_args = yolo_args
+        
 
         self.det_logger = logging.getLogger(self.__class__.__name__)
 
     def run(self):
         self.running = True
         
-        intrinsics = self._camera.depth_intrinsics
-        width, height = self._camera.width, self._camera.height
+        intrinsics = self._depth_intrinsics
+        width, height = self._width, self._height
 
         self.det_logger.info("Detection Thread started")
        
         while self.running:
             try:
-                frame = self._camera.get_latest_frame()
+                frame = self._frame_queue.get_nowait()
                 if frame is None:
                     continue
                 color_frame, depth_frame = frame

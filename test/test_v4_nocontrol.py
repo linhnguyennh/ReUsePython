@@ -17,17 +17,24 @@ def main():
     camera = RealSenseStream(fps=30, width=640, height=480)
     camera.start()
 
-    #model = YOLO(r"models\focus1\retrain_obb_BIGMAP_260108\train\weights\morrow_obb_260108.pt", task='obb')
+    model = YOLO(r"models\focus1\retrain_obb_BIGMAP_260108\train\weights\morrow_obb_260108.pt", task='obb')
     #model = YOLO(r"models\focus1\retrain_obb_BIGMAP_251203\train2\weights\morrow_obb_251203.pt")
-    model = YOLO(r"models\focus1\retrain\train3\weights\best_morrow_251020.pt")
+    #model = YOLO(r"models\focus1\retrain\train3\weights\best_morrow_251020.pt")
+    #model = YOLO(r"models\focus1\260417\train\weights\best.pt")
 
     
     #model = YOLO(r"models\focus1\retrain_obb_BIGMAP_251203\train2\weights\morrow_obb_251203.onnx")
+    
+    camera_frame_queue = camera.frame_queue
+    
     detection_worker = DetectionWorker(
         model=model,
-        camera=camera,
+        width=camera.width,
+        height=camera.height,
+        depth_intrinsics=camera.depth_intrinsics,
+        frame_queue=camera_frame_queue,
         max_queue_size=1,
-        obb=False,
+        obb=True,
         conf=0.70,
         imgsz=(480,640),
         device='cuda'
@@ -37,7 +44,7 @@ def main():
         height=camera.height,
         depth_scale=camera.depth_scale,
         results_queue=detection_worker.results_queue,
-        obb=False,
+        obb=True,
         limit_box=True
     )
 

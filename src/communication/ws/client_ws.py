@@ -35,7 +35,7 @@ class StreamClientWebSocket:
 
     # ---------- default encoder ----------
     @staticmethod
-    def _default_encoder(rgb, depth=None) -> bytes:
+    def _default_encoder(rgb, depth=None, mask=None) -> bytes:
         return encode_frame(rgb, depth)
 
     # ---------- setup ----------
@@ -47,15 +47,19 @@ class StreamClientWebSocket:
         logger.info("Send loop started")
         while self._running:
             try:
-                color_frame, depth_frame = self.frame_queue.get(timeout=1.0)
+                color_frame, depth_frame, mask_frame = self.frame_queue.get(timeout=1.0)
             except Empty:
                 continue
+            except ValueError:
+                logger.error("Expected (rgb, depth, mask) tuple in queue")
+                continue
 
-            rgb   = np.asanyarray(color_frame.get_data())
-            depth = np.asanyarray(depth_frame.get_data())
+            rgb_data   = np.asanyarray(color_frame.get_data())
+            depth_data = np.asanyarray(depth_frame.get_data())
+            mask = mask_frame
 
             try:
-                packet = self.encoder(rgb, depth)
+                packet = self.encoder(rgb_data, depth_data, mask)
                 self.ws.send(packet)
             except Exception as e:
                 logger.error(f"Send error: {e}")
