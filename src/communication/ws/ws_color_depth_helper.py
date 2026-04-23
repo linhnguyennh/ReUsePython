@@ -6,7 +6,7 @@ import cv2
 from typing import Any
 
 # Header: magic(H) + rgb_size(I) + depth_size(I) + mask_size(I)
-HEADER_FORMAT = '>HIIII'
+HEADER_FORMAT = '>HIII'
 HEADER_SIZE   = struct.calcsize(HEADER_FORMAT)
 MAGIC         = 0xAB01
 

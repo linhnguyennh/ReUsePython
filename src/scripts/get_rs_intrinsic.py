@@ -16,3 +16,4 @@ color_intrinsics = profile.get_stream(rs.stream.color)\
                           .get_intrinsics()
 
 print(color_intrinsics)
+print(config.depth_scale)

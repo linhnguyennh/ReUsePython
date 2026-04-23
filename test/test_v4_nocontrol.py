@@ -10,7 +10,7 @@ import logging
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.vision.realsense_stream import RealSenseStream
-from src.vision.pipeline_workers import DetectionWorker, DisplayWorker
+from src.vision.pipeline_workers import DetectionWorker, DisplayWorker, SegmentationWorker
 
 def main():
     # --- Start camera and model ---
