@@ -5,9 +5,11 @@ import logging
 from queue import Queue, Empty
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import uvicorn
+import asyncio
 from typing import Callable, Any, Optional
-from ws_color_depth_helper import decode_frame
+from ws_color_depth_helper import decode_frame, encode_pose
 from foundationpose_class import FoundationPoseEstimator  # your class from earlier
+from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,16 @@ class StreamServerWebSocket:
         self.K             = K
         self.display_queue = Queue(maxsize=1)
         self.frame_queue   = Queue(maxsize=1)
-        self.app           = FastAPI()
+        self.pose_queue = Queue(maxsize=1)
+
+        self._websocket = None
+
+        @asynccontextmanager
+        async def lifespan(app):
+            asyncio.ensure_future(self._pose_sender())
+            yield
+
+        self.app           = FastAPI(lifespan=lifespan)
         self.setup_routes()
 
         # FoundationPose — only created if mesh_file is provided
@@ -38,6 +49,7 @@ class StreamServerWebSocket:
     # ---------- websocket handler — just receives and queues ----------
     async def handle_client(self, websocket: WebSocket):
         await websocket.accept()
+        self._websocket = websocket
         logger.info("Client connected")
         try:
             while True:
@@ -56,7 +68,7 @@ class StreamServerWebSocket:
 
         except WebSocketDisconnect:
             logger.info("Client disconnected")
-
+            self._websocket = None
     # ---------- default decoder ----------
     @staticmethod
     def _default_decoder(buffer: bytes):
@@ -116,11 +128,6 @@ class StreamServerWebSocket:
                 try:
                     pose = self.estimator.track(rgb, depth, self.K)
 
-                    # if pose is None or np.isnan(pose).any():
-                    #     logger.warning("Tracking failed → reset")
-                    #     self.estimator._initialized = False
-                    #     continue
-
                 except Exception as e:
                     logger.error(f"Tracking error: {e}")
                     # self.estimator._initialized = False
@@ -132,8 +139,40 @@ class StreamServerWebSocket:
             self._push_display(rgb, depth, mask, pose)
 
             if pose is not None:
+                # CODE FOR PUSHING POSE DATA BACK TO CLIENT HERE
+                # QUEUE
+                #
+                if self.pose_queue.full():
+                    try:
+                        self.pose_queue.get_nowait()
+                    except Empty:
+                        pass
+
+                self.pose_queue.put_nowait(pose)
+                
+
                 t = pose[:3, 3]
                 logger.info(f"t (m): x={t[0]:.3f} y={t[1]:.3f} z={t[2]:.3f}")
+                logger.info(f"Pose matrix: {pose}")
+
+    async def _pose_sender(self):
+        while True:
+            await asyncio.sleep(0.001)
+            if self._websocket is None:
+                continue
+            
+            #Get pose from queue
+            try:
+                pose = self.pose_queue.get_nowait()
+            except Empty:
+                continue
+            
+            #Send pose back to client
+            try:
+                await self._websocket.send_bytes(encode_pose(pose))
+                logger.info(f"Pose sent!")
+            except Exception as e:
+                logger.error(f"Pose send error: {e}")
 
     # -------------------------
     # Safe queue push

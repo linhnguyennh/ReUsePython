@@ -13,10 +13,7 @@ import time
 root_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(root_dir))
 
-try:
-    from src.communication.ws.ws_color_depth_helper import encode_frame
-except ImportError:
-    from ws_color_depth_helper import encode_frame
+from src.communication.ws.ws_helper import encode_frame, decode_pose, TYPE_POSE
 from src.vision.realsense_stream import RealSenseStream
 from src.vision.pipeline_workers import SegmentationWorker
 
@@ -35,6 +32,7 @@ class StreamClientWebSocket:
         self.encoder     = encoder or self._default_encoder
         self.ws          = None
         self._running    = False
+        self.latest_pose = None
 
     # ---------- default encoder ----------
     @staticmethod
@@ -71,13 +69,37 @@ class StreamClientWebSocket:
 
         logger.info("Send loop stopped")
 
+    def _pose_loop(self):
+        logger.info("Pose receive loop started")
+        while self._running:
+            try:
+                data = self.ws.recv(timeout=1.0)
+                if isinstance(data, bytes):
+                    result = decode_pose(data)
+                    if result["type"] == TYPE_POSE:
+                        self.latest_pose = result["pose"]
+                        t = self.latest_pose[:3, 3]
+                        logger.info(f"Pose received: x={t[0]:.3f} y={t[1]:.3f} z={t[2]:.3f}")
+            except TimeoutError:
+                continue
+            except Exception as e:
+                logger.error(f"Pose receive error: {e}")
+                break
+
+        logger.info("Pose receive loop stopped")
+
+
+
     # ---------- run ----------
     def run(self):
         self._connect_ws()
         self._running = True
 
         send_thread = threading.Thread(target=self._send_loop, daemon=True)
+        pose_thread = threading.Thread(target=self._pose_loop, daemon=True)
+
         send_thread.start()
+        pose_thread.start()
 
         try:
             while self._running:
@@ -89,8 +111,11 @@ class StreamClientWebSocket:
 
         finally:
             send_thread.join(timeout=2)
+            pose_thread.join(timeout=2)
             self.close()
+
     def close(self):
+        self._running = False
         if self.ws:
             try:
                 self.ws.close()
@@ -117,7 +142,8 @@ if __name__ == "__main__":
         frame_queue = frame_queue,
         max_queue_size=1,
         conf=0.6,
-        device='cuda'
+        device='cuda',
+        verbose = False
     )
     
     segmentor_out_queue = segmentor.mask_queue
