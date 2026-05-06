@@ -23,7 +23,7 @@ MIN_CORNERS = 6           # minimum corners to accept a frame
 MIN_IMAGES = 20           # minimum images before allowing calibration
 TARGET_IMAGES = 40        # aim for this many
 
-SAVE_DIR = "intrinsic_images"
+SAVE_DIR = "GP7_intrinsic_images"
 
 # ============================================================
 # SETUP
@@ -351,7 +351,7 @@ def calibrate():
             print(f"    {used_images[idx]}")
 
     # --- Save ---
-    np.savez("intrinsics.npz",
+    np.savez("GP7_intrinsics.npz",
         K=K,
         D=D,
         reprojection_error=ret,
@@ -373,7 +373,7 @@ def calibrate():
 # ============================================================
 def verify():
     """Visual check — show undistorted live feed."""
-    data = np.load("intrinsics.npz")
+    data = np.load("GP7_intrinsics.npz")
     K = data["K"]
     D = data["D"]
 

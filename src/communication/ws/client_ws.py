@@ -19,6 +19,10 @@ from src.vision.pipeline_workers import SegmentationWorker
 
 logger = logging.getLogger(__name__)
 
+T_gripper_cam =  np.array([[0.0,     -1.0,   -0.3,   0.088],
+                          [1.0,      0.0,  0.013,  -0.035],
+                          [-0.01,   -0.3,   0.95,  -0.041],
+                          [0.0,      0.0,    0.0,     1.0]])
 
 class StreamClientWebSocket:
     def __init__(
@@ -32,7 +36,7 @@ class StreamClientWebSocket:
         self.encoder     = encoder or self._default_encoder
         self.ws          = None
         self._running    = False
-        self.latest_pose = None
+        self.T_cam_obj = None
 
     # ---------- default encoder ----------
     @staticmethod
@@ -77,9 +81,9 @@ class StreamClientWebSocket:
                 if isinstance(data, bytes):
                     result = decode_pose(data)
                     if result["type"] == TYPE_POSE:
-                        self.latest_pose = result["pose"]
-                        t = self.latest_pose[:3, 3]
-                        logger.info(f"Pose received: x={t[0]:.3f} y={t[1]:.3f} z={t[2]:.3f}")
+                        self.T_cam_obj = result["pose"]
+                        gripper_pose = T_gripper_cam @ self.T_cam_obj 
+                        logger.info(f"Gripper Pose Matrix: {np.round(gripper_pose,2)}")
             except TimeoutError:
                 continue
             except Exception as e:

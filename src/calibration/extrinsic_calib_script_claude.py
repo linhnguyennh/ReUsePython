@@ -25,10 +25,10 @@ CAM_HEIGHT = 480
 CAM_FPS = 30
 
 # Paths
-INTRINSICS_FILE = "intrinsics.npz"
-POSES_CSV = "robot_poses.csv"
-IMAGE_DIR = "handeye_images"
-RESULT_FILE = "handeye_result.npz"
+INTRINSICS_FILE = "GP7_intrinsics.npz"
+POSES_CSV = "GP7_poses.csv"
+IMAGE_DIR = "GP7_handeye_images"
+RESULT_FILE = "GP7_handeye_result.npz"
 
 # Detection
 MIN_CORNERS = 6

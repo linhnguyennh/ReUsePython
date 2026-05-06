@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import uvicorn
 from typing import Callable, Any, Optional
-from ws_color_depth_helper import decode_frame
+from src.communication.ws.ws_helper import decode_frame
 
 
 class StreamServerWebSocket:
