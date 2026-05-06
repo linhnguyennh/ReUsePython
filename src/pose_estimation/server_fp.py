@@ -104,56 +104,56 @@ class StreamServerWebSocket:
             # -------------------------
             # Registration
             # -------------------------
-            if not self.estimator._initialized:
-                if mask is None or np.sum(mask > 0) < 500:
-                    continue
 
-                try:
-                    logger.info("Registering object...")
-                    pose = self.estimator.register(rgb, depth, mask, self.K)
+            #TODO: Check for if object leaves the frame (no mask)
+            if np.sum(mask > 0) >= 300:
+                if not self.estimator._initialized:
+                    try:
+                        logger.info("Registering object...")
+                        pose_candidate = self.estimator.register(rgb, depth, mask, self.K)
 
-                    if pose is None or np.isnan(pose).any():
-                        continue
+                        if pose_candidate is not None and not np.isnan(pose_candidate).any():
+                            pose = pose_candidate
+                            logger.info("Registration done")
 
-                    logger.info("Registration done")
+                    except Exception as e:
+                        logger.error(f"Registration failed: {e}")
 
-                except Exception as e:
-                    logger.error(f"Registration failed: {e}")
-                    continue
+                # -------------------------
+                # Tracking
+                # -------------------------
+                else:
+                    try:
+                        pose_candidate = self.estimator.track(rgb, depth, self.K)
 
-            # -------------------------
-            # Tracking
-            # -------------------------
+                        if pose_candidate is not None and not np.isnan(pose_candidate).any():
+                            pose = pose_candidate
+
+                    except Exception as e:
+                        logger.error(f"Tracking error: {e}")
+
+                    if pose is not None:
+                        # CODE FOR PUSHING POSE DATA BACK TO CLIENT HERE
+                        # QUEUE
+                        #
+                        if self.pose_queue.full():
+                            try:
+                                self.pose_queue.get_nowait()
+                            except Empty:
+                                pass
+
+                        self.pose_queue.put_nowait(pose)
+                        
+
+                        t = pose[:3, 3]
+                        logger.info(f"t (m): x={t[0]:.3f} y={t[1]:.3f} z={t[2]:.3f}")
+                        logger.info(f"Pose matrix: {pose}")
             else:
-                try:
-                    pose = self.estimator.track(rgb, depth, self.K)
-
-                except Exception as e:
-                    logger.error(f"Tracking error: {e}")
-                    # self.estimator._initialized = False
-                    continue
-
+                self.estimator._initialized = False
             # -------------------------
             # Push to display (RAW DATA ONLY)
             # -------------------------
             self._push_display(rgb, depth, mask, pose)
-
-            if pose is not None:
-                # CODE FOR PUSHING POSE DATA BACK TO CLIENT HERE
-                # QUEUE
-                #
-                if self.pose_queue.full():
-                    try:
-                        self.pose_queue.get_nowait()
-                    except Empty:
-                        pass
-
-                self.pose_queue.put_nowait(pose)
-                
-
-                t = pose[:3, 3]
-                logger.info(f"t (m): x={t[0]:.3f} y={t[1]:.3f} z={t[2]:.3f}")
-                logger.info(f"Pose matrix: {pose}")
 
     async def _pose_sender(self):
         while True:
@@ -244,7 +244,7 @@ class StreamServerWebSocket:
                     logger.error(f"Visualization error: {e}")
                     show = show[..., ::-1]  # still convert so everything below is BGR
             else:
-                show = show[..., ::-1]  # RGB → BGR for cv2
+                show = show#[..., ::-1]  # RGB → BGR for cv2
 
             # =========================================================
             # 2. DEPTH PANEL — applyColorMap returns BGR, keep it BGR
@@ -281,7 +281,7 @@ class StreamServerWebSocket:
                 label(show,        "RGB + Mask + Pose"),
                 label(depth_panel, "Depth"),
                 label(mask_panel,  "Mask"),
-            ], axis=1)
+            ], axis=0)
 
             cv2.imshow("Realsense D435i -> FoundationPose + YOLOv11-seg -> 6D pose", row)
 
