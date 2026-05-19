@@ -2,6 +2,20 @@ import numpy as np
 import scipy
 from scipy.spatial.transform import Rotation
 from math import pi
+from dataclasses import dataclass
+
+# @dataclass
+# class ObjectPose:
+#     pose_obj_to_cam : np.array = None
+#     pose_obj_to_gripper : np.array = None
+#     rotation_matrix : np.array = None
+#     x_axis : np.array = get_x_axis(rotation_matrix)
+#     y_axis : np.array = get_y_axis(rotation_matrix)
+#     z_axis : np.array = get_z_axis(rotation_matrix)
+#     position : np.array = None
+
+
+
 
 def transform_pose(pose, T_B_to_A = np.eye(4)): # 4x4 pose with R and t
     transformed_pose = T_B_to_A @ pose #EXAMPLE: pose in cam frame (B) to pose in gripper frame (A) via T_C_G 
@@ -36,7 +50,7 @@ def euler_angles(R_align): #Convert rotation matrix to euler angles with intrins
 
 
 def align_axis(axis_reference =  np.array([1.0, 0.0, 0.0]),
-                axis_target = np.array([1.0, 0.0, 0.0])): # 4x4 poes with R and t
+                axis_target = np.array([1.0, 0.0, 0.0])): 
     
     #Perform all three steps in one function
 
@@ -48,6 +62,49 @@ def align_axis(axis_reference =  np.array([1.0, 0.0, 0.0]),
     rz, ry, rx = euler_angles(R_align)
 
     return rz, ry, rx
+
+def pre_grasp_xyz(orig_coord, axis, offset_meter): #Generate coordinate [offset] in meter amount away from an axis
+    axis_normalized = axis / np.linalg.norm(axis)
+    delta_vector = offset_meter * axis_normalized
+    pre_grasp_coord = orig_coord - delta_vector
+    return pre_grasp_coord, delta_vector
+
+def is_pointing_away(axis1, axis2):
+    axis1_norm = axis1 / np.linalg.norm(axis1)
+    axis2_norm = axis2 / np.linalg.norm(axis2)
+
+    dot = np.dot(axis1_norm, axis2_norm)
+    if dot > 0:
+        return True
+    else:
+        return False
+
+def compare_dot_product(axis1, axis2, axis_reference):
+    dot1 = np.dot(axis1, axis_reference)
+    dot2 = np.dot(axis2, axis_reference)
+    return (axis1, dot1) if abs(dot1) > abs(dot2) else (axis2, dot2)
+
+def signed_angle(a, b, n):
+    a = a / np.linalg.norm(a)
+    b = b / np.linalg.norm(b)
+    n = n / np.linalg.norm(n)
+
+    cross = np.cross(a, b)
+    sin_term = np.dot(cross, n)
+    cos_term = np.dot(a, b)
+
+    angle = np.arctan2(sin_term, cos_term)
+    return np.degrees(angle)
+
+def symmetric_angle(theta):
+    theta = (theta + 180) % 360 - 180  # normalize to [-180, 180]
+
+    if theta > 90:
+        theta = 180 - theta
+    elif theta < -90:
+        theta = -180 - theta
+
+    return theta
 
 def get_rotation_matrix(T_matrix):
     return T_matrix[:3, :3]
@@ -61,6 +118,8 @@ def get_y_axis(R_matrix):
 def get_z_axis(R_matrix):
     return R_matrix[:,2]
 
+def get_position(T_matrix):
+    return T_matrix[:3,3]
 
 if __name__ == "__main__":
     T_cam_to_gripper =  np.array([[0.0,     -1.0,   -0.3,   0.088],

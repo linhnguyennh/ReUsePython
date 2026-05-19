@@ -4,7 +4,7 @@ from queue import Queue, Empty, Full
 class PoseWorker:
     def __init__ (self, pose_input_queue : Queue):
         self._pose_input_queue = pose_input_queue
-        self._processed_pose_queue = Queue(maxsize=1)
+        self._euler_angle = Queue(maxsize=1)
         self._running = False
         self._process_pose_thread : threading.Thread = None
 

@@ -178,43 +178,35 @@ class Yaskawa_YRC1000(OPCUADevice):
             print("finished job: ", job_name)
 
 
-def get_vision_coordinates():
-    # Replace with actual camera or model output
-    u, v, depth = 320, 240, 0.42
-    fx, fy, cx, cy = 607.7, 607.8, 320.1, 258.0
-    X = (u - cx) * depth / fx
-    Y = (v - cy) * depth / fy
-    Z = depth
-    return X, Y, Z
-
-
 # ────────────────────────────────────────────────────────────────
 # 🚀 Main program
 # ────────────────────────────────────────────────────────────────
 
 def main():
-    robot_url = "opc.tcp://192.168.0.20:16448"
-    plc_url = "opc.tcp://192.168.0.1:4840"
-
-    #robot = Yaskawa_YRC1000(robot_url)
-    plc = PLCClient(plc_url)
+    robot_url = "opc.tcp://192.168.0.56:16448"
+    robot = Yaskawa_YRC1000(robot_url)
+    
+    # plc_url = "opc.tcp://192.168.0.1:4840"
+    # plc = PLCClient(plc_url)
 
     try:
-        print("System initialized. Waiting for PLC Ack...")
-        # while not plc.get_ack():
-        #     time.sleep(0.1)
-        print("✅ PLC ready.")
+        # print("System initialized. Waiting for PLC Ack...")
+        # # while not plc.get_ack():
+        # #     time.sleep(0.1)
+        # print("✅ PLC ready.")
 
-        #coords = get_vision_coordinates()
-        #plc.send_coordinates(*coords)
+        # #coords = get_vision_coordinates()
+        # #plc.send_coordinates(*coords)
 
-        plc.set_trigger(True)
-        time.sleep(0.2)
-        plc.set_trigger(False)
+        # plc.set_trigger(True)
+        # time.sleep(0.2)
+        # plc.set_trigger(False)
 
-        # robot.set_servo(True)
-        # robot.start_job('TICTACTOE_X0_HOME_PLAY', block=True)
-        # robot.set_servo(False)
+        robot.set_servo(True)
+        time.sleep(1)
+        robot.start_job('', block=True)
+        time.sleep(1)
+        robot.set_servo(False)
 
         # Notify PLC robot done
         # plc.set_trigger(True)
@@ -222,8 +214,8 @@ def main():
         # plc.set_trigger(False)
 
     finally:
-        plc.stop_communication()
-        #robot.stop_communication()
+        #plc.stop_communication()
+        robot.stop_communication()
         print("🔚 Program ended.")
 
 

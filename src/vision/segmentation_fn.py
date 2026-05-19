@@ -9,11 +9,13 @@ import math
 def segment_object(model: YOLO, rgb_image, **yolo_args):
     results = model(rgb_image, **yolo_args)[0]
 
-    if results.masks is None:
-        return None, None
-
     h, w = rgb_image.shape[:2]
     
+    if results.masks is None:
+        empty_mask = np.zeros((h, w), dtype=np.uint8)
+        empty_box = np.array([0, 0, 0, 0], dtype=np.float32)  # optional
+        return empty_mask, empty_box
+
     # 1. Get all valid detections
     masks = results.masks.data.cpu().numpy()  # [N, H, W]
     boxes = results.boxes.xyxy.cpu().numpy() # [N, 4]

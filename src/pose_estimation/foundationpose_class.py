@@ -43,8 +43,8 @@ class FoundationPoseEstimator:
             glctx=glctx,
         )
 
-        self.prev_pose = None
-        self.smooth_alpha = 0.7
+        #self.prev_pose = None
+        #self.smooth_alpha = 0.7
 
         logging.info("FoundationPose initialized")
 
@@ -84,39 +84,39 @@ class FoundationPoseEstimator:
         iteration=self.track_refine_iter,
         )
 
-        if pose is None or np.isnan(pose).any():
-            return self.prev_pose  # or skip update
+        # if pose is None or np.isnan(pose).any():
+        #     return self.prev_pose  # or skip update
 
-        pose = self.smooth_pose(pose)
+        #pose = self.smooth_pose(pose)
 
-        self.prev_pose = pose
+        #self.prev_pose = pose
         return pose
 
     def visualize(self, rgb: np.ndarray, pose: np.ndarray, K: np.ndarray) -> np.ndarray:
         """Draws bounding box and XYZ axes onto the image. Returns BGR image."""
         center_pose = pose @ np.linalg.inv(self.to_origin)
         vis = draw_posed_3d_box(K, img=rgb, ob_in_cam=center_pose, bbox=self.bbox)
-        vis = draw_xyz_axis(vis, ob_in_cam=center_pose, scale=0.1, K=K, thickness=3, transparency=0, is_input_rgb=False)
-        return vis  # RGB → BGR for cv2
+        vis = draw_xyz_axis(vis, ob_in_cam=center_pose, scale=0.1, K=K, thickness=3, transparency=0, is_input_rgb=True)
+        return vis[...,::-1]  # RGB → BGR for cv2
     
-    def smooth_pose(self, pose):
-        if self.prev_pose is None:
-            return pose
-        pose = pose.copy()
-        alpha = self.smooth_alpha
+    # def smooth_pose(self, pose):
+    #     if self.prev_pose is None:
+    #         return pose
+    #     pose = pose.copy()
+    #     alpha = self.smooth_alpha
 
-        # translation
-        pose[:3, 3] = (
-            alpha * self.prev_pose[:3, 3] +
-            (1 - alpha) * pose[:3, 3]
-        )
+    #     # translation
+    #     pose[:3, 3] = (
+    #         alpha * self.prev_pose[:3, 3] +
+    #         (1 - alpha) * pose[:3, 3]
+    #     )
 
-        # rotation (simple linear blend, not perfect but stable)
-        R_new = pose[:3, :3]
-        R_old = self.prev_pose[:3, :3]
+    #     # rotation (simple linear blend, not perfect but stable)
+    #     R_new = pose[:3, :3]
+    #     R_old = self.prev_pose[:3, :3]
 
-        R = alpha * R_old + (1 - alpha) * R_new
-        U, _, Vt = np.linalg.svd(R)
-        pose[:3, :3] = U @ Vt
+    #     R = alpha * R_old + (1 - alpha) * R_new
+    #     U, _, Vt = np.linalg.svd(R)
+    #     pose[:3, :3] = U @ Vt
 
-        return pose
+    #     return pose
