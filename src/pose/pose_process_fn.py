@@ -63,11 +63,11 @@ def align_axis(axis_reference =  np.array([1.0, 0.0, 0.0]),
 
     return rz, ry, rx
 
-def pre_grasp_xyz(orig_coord, axis, offset_meter): #Generate coordinate [offset] in meter amount away from an axis
+def pre_grasp_xyz(orig_coord, axis, offset_meter, gripper_depth): #Generate coordinate [offset] in meter amount away from an axis
     axis_normalized = axis / np.linalg.norm(axis)
-    delta_vector = offset_meter * axis_normalized
-    pre_grasp_coord = orig_coord - delta_vector
-    return pre_grasp_coord, delta_vector
+    pre_grasp_coord = orig_coord - offset_meter * axis_normalized
+    approach_vector = gripper_depth * axis_normalized
+    return pre_grasp_coord, approach_vector
 
 def is_pointing_away(axis1, axis2):
     axis1_norm = axis1 / np.linalg.norm(axis1)

@@ -107,31 +107,26 @@ class StreamClientWebSocket:
         self._connect_ws()
         self._running = True
 
-        send_thread = threading.Thread(target=self._send_loop, daemon=True)
-        pose_thread = threading.Thread(target=self._pose_loop, daemon=True)
+        self._send_thread = threading.Thread(target=self._send_loop, daemon=True)
+        self._pose_thread = threading.Thread(target=self._pose_loop, daemon=True)
 
-        send_thread.start()
-        pose_thread.start()
+        self._send_thread.start()
+        self._pose_thread.start()
 
-        try:
-            while self._running:
-                time.sleep(0.1)
-
-        except KeyboardInterrupt:
-            print("KeyboardInterrupt received → stopping client")
-            self._running = False
-
-        finally:
-            send_thread.join(timeout=2)
-            pose_thread.join(timeout=2)
+        logger.info("Client started")
 
     def stop(self):
         self._running = False
+
         if self.ws:
             try:
                 self.ws.close()
             except Exception as e:
                 logger.error(f"Error closing websocket: {e}")
+        
+        self._send_thread.join(timeout=2)
+        self._pose_thread.join(timeout=2)
+
         logger.info("Client closed")
 
     @property
@@ -211,12 +206,9 @@ if __name__ == "__main__":
                 print("===== TRANSFORMED MATRICES =====")
                 print(f"Transformed posed: \n {pose_obj_to_gripper}")
                 print(f"Rotation matrix: \n {obj_to_gripper_rotation_matrix}")
-                print(f"X axis: {pose_x_axis}")
-                print(f"Y axis: {pose_y_axis}")
-                print(f"Z axis: {pose_z_axis}")
 
                 # Generate which axis is best (which one is the most aligned with z-axis)
-                pose_axis_to_align, dot_to_align = compare_dot_product(pose_y_axis, pose_x_axis, robot_z) #Generate the axis and its dot product with reference for alignment
+                pose_axis_to_align, dot_to_align = compare_dot_product(pose_y_axis, pose_x_axis, robot_z) #Generate the axis and its dot product with reference for alignment, we dont care about the z axis because it's not a graspable axis
 
                 #Check alignment direction (towards (dot<0) or away (dot>0) from camera)
                 if dot_to_align >= 0:
@@ -226,6 +218,7 @@ if __name__ == "__main__":
 
                 if not is_away: #Enforce is pointing away from gripper Z
                     pose_axis_to_align = -pose_axis_to_align
+
                 print("===== DOT PRODUCTS =====")
                 dx = np.dot(robot_z,pose_x_axis)
                 dy = np.dot(robot_z,pose_y_axis)
@@ -237,41 +230,16 @@ if __name__ == "__main__":
                 print("===== ANGLE TO ROTATE =====")
                 s_angle = signed_angle(robot_z, pose_axis_to_align, robot_x)
                 sym_angle  = symmetric_angle(s_angle)
-                print(f"Signed Angle: {s_angle}, Sym. Angle: {sym_angle}")
+                print(f"Signed Angle: {s_angle:.2f}, Sym. Angle: {sym_angle:.2f}")
 
                 rz,ry,rx = align_axis(robot_z, pose_axis_to_align)
                 print(f"RX: {rx:.2f}, RY: {ry:.2f}, RZ:{rz:.2f}")
 
                 print("===== OBJECT POSITION AND PREGRASP IN GRIPPER FRAME =====")
-                print(f"Object POSITION: {pose_position}")
-                pre_grasp_position, delta_vector = pre_grasp_xyz(pose_position, pose_axis_to_align, 0.140) #A point 14cm on the line of the axis to-be-aligned away from object
-                print(f"Pregrasp: {pre_grasp_position}, Delta: {delta_vector}")
-                
-                # print("===== DIRECTION CHECK =====")
-                # is_away_x = is_pointing_away(robot_z, pose_x_axis)
-                # is_away_y = is_pointing_away(robot_z, pose_y_axis)
-                # is_away_z = is_pointing_away(robot_z, pose_z_axis)
+                print(f"Object POSITION: {np.round(pose_position, 2)}")
+                pre_grasp_position, approach_vector = pre_grasp_xyz(pose_position, pose_axis_to_align, 0.140, 0.6) #A point 14cm on the line of the axis to-be-aligned away from object
+                print(f"Pregrasp: {np.round(pre_grasp_position,2)}, Approach: {np.round(approach_vector,2)}")
 
-                # COMPARE BLUE AND GREEN ONLY (Based on absolute value) --> MAX OF THESE TWO GETS THE WIN
-                # WHICH EVER WINS: DIRECTION CHECK --> pointing towards then vector +, else vector -
-                # THEN GENERATE PREGRASP XYZ and rotation
-                # THEN MOVE IN DELTA DIRECTION
-                # THEN GRASP
-
-                # # if is_away_x:
-                # #     print("X pointing same direction")
-                # # else:
-                # #     print("X pointing opposite")
-
-                # # if is_away_y:
-                # #     print("Y pointing same direction")
-                # # else:
-                # #     print("Y pointing opposite")
-
-                # # if is_away_z:
-                # #     print("Z pointing same direction")
-                # # else:
-                # #     print("Z pointing opposite")
 
 
                 time.sleep(1)

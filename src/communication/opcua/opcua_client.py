@@ -2,16 +2,19 @@ from asyncua.sync import Client, ThreadLoop
 from asyncua import ua
 import time
 import logging
-
+import yaml
+from pathlib import Path
 # ────────────────────────────────────────────────────────────────
 # 🧠 Base class for all OPC UA devices
 # ────────────────────────────────────────────────────────────────
 
-class OPCUADevice:
+
+class OPCUAClient:
     def __init__(self, url, auto_start=True):
         self.url = url
-        self.client = None
+        self.client : Client
         self.tloop = None
+        self.client_logger = logging.getLogger(__name__)
         if auto_start:
             self.start_communication()
 
@@ -28,12 +31,31 @@ class OPCUADevice:
         self.tloop.daemon = True
         self.client = Client(self.url, tloop=self.tloop)
         self.tloop.start()
+        #Remove some verbose
+        logging.getLogger("asyncua.client.client").setLevel(logging.WARNING)
         self.client.connect()
-        print(f"✅ Connected to OPC UA server: {self.url}")
+        self.client_logger.info(f"✅ Connected to OPC UA server: {self.url}")
 
-    def get_node(self, nodeid: str):
+    def node(self, nodeid: str):
         """Shortcut for get_node."""
         return self.client.get_node(nodeid)
+    
+    def set_node_value(self, node, value, variant_type=None):
+        try:
+            if variant_type:
+                dv = ua.DataValue(ua.Variant(value, variant_type))
+                node.set_value(dv)
+            else:
+                node.set_value(value)
+        except Exception as e:
+            self.client_logger.exception("Set node '%s' failed: %s", node, e)
+
+    def get_node_value(self, node, default=None):
+        try:
+            return node.get_value()
+        except Exception as e:
+            self.client_logger.exception("OPC UA read failed: %s", node)
+            return default
 
     def stop_communication(self):
         """Gracefully disconnect and stop loop."""
@@ -41,10 +63,8 @@ class OPCUADevice:
             self.client.disconnect()
         if self.tloop:
             self.tloop.stop()
-        print(f"🔌 Disconnected from {self.url}")
+        self.client_logger.info(f"🔌 Disconnected from {self.url}")
 
-    def __del__(self):
-        self.stop_communication()
         
 
 
@@ -52,7 +72,7 @@ class OPCUADevice:
 # ⚙️ PLC Client (inherits base)
 # ────────────────────────────────────────────────────────────────
 
-class PLCClient(OPCUADevice):
+class PLCClient(OPCUAClient):
     def __init__(self, url, auto_start=True):
         super().__init__(url, auto_start)
         if auto_start:
@@ -140,7 +160,7 @@ class PLCClient(OPCUADevice):
 # 🤖 Yaskawa Robot Client (inherits base)
 # ────────────────────────────────────────────────────────────────
 
-class Yaskawa_YRC1000(OPCUADevice):
+class Yaskawa_YRC1000(OPCUAClient):
     def __init__(self, url, auto_start=True):
         super().__init__(url, auto_start)
         if auto_start:
@@ -178,45 +198,91 @@ class Yaskawa_YRC1000(OPCUADevice):
             print("finished job: ", job_name)
 
 
+class PLCNodeMap:
+    def __init__(self, client: OPCUAClient, yaml_path: str):
+        self.client = client
+
+        with open(yaml_path, "r") as f:
+            self.config = yaml.safe_load(f)
+
+        self.nodes = self._build_nodes(self.config)
+
+    def _build_nodes(self, cfg):
+        result = {}
+
+        for key, value in cfg.items():
+
+            if isinstance(value, dict):
+                result[key] = {
+                    k: self.client.node(v) for k, v in value.items()
+                }
+            else:
+                result[key] = self.client.node(value)
+
+        return result
+
+class PLCInterface:
+    def __init__(self, node_map : PLCNodeMap , plc_opcua_client : OPCUAClient):
+        self.nodes = node_map.nodes
+        self.io = plc_opcua_client
+
+    def set_pregrasp_tcp(self, value: list[float]):
+        self.io.set_node_value(self.nodes['plc']['pregrasp_tcp'], value, ua.VariantType.Float)
+
+    def set_wrist_rotation_tcp(self, value: list[float]):
+        self.io.set_node_value(self.nodes['plc']['wrist_rotate_tcp'], value, ua.VariantType.Float)
+
+    def set_approach_tcp(self, value: list[float]):
+        self.io.set_node_value(self.nodes['plc']['approach_tcp'], value, ua.VariantType.Float)
+
+    def get_state_motion(self):
+        return self.io.get_node_value(self.nodes['plc']['state_motion'])  
+
+    def get_bool_6D_pose_data(self):
+         return self.io.get_node_value(self.nodes['plc']['get_6D_pose_data'])   
 # ────────────────────────────────────────────────────────────────
 # 🚀 Main program
 # ────────────────────────────────────────────────────────────────
+def test_robot_comm():
+        try:
+            robot_url = "opc.tcp://192.168.0.56:16448"
+            robot = Yaskawa_YRC1000(robot_url)
+            robot.set_servo(True)
+            # time.sleep(1)
+            # robot.start_job('', block=True)
+            time.sleep(1)
+            robot.set_servo(False)
+        finally:
+            robot.stop_communication()
+            print("🔚 Program ended.")
+
+def test_plc_comm():
+    try:
+        plc_url = "opc.tcp://192.168.0.1:4840"
+        plc_client = OPCUAClient(plc_url)
+
+        node_map = PLCNodeMap(plc_client, r"C:\Users\lin40269\Desktop\Linh (Desktop)\01_Python\realsense\config\plc_opcua_nodes.yaml")
+        
+        plc_io = PLCInterface(node_map,plc_client)
+
+        print(plc_io.nodes)
+        print(plc_client.get_node_value(plc_io.nodes['plc']['pregrasp_tcp']))
+        plc_client.set_node_value(plc_io.nodes['plc']['pregrasp_tcp'], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], ua.VariantType.Float)
+        print(plc_client.get_node_value(plc_io.nodes['plc']['pregrasp_tcp']))
+
+        plc_io.set_wrist_rotation_tcp([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        print("STATE_MOTION: ",plc_io.get_state_motion())
+    finally:
+
+        plc_client.stop_communication()
+
+
+    
+
 
 def main():
-    robot_url = "opc.tcp://192.168.0.56:16448"
-    robot = Yaskawa_YRC1000(robot_url)
-    
-    # plc_url = "opc.tcp://192.168.0.1:4840"
-    # plc = PLCClient(plc_url)
+    test_plc_comm()
 
-    try:
-        # print("System initialized. Waiting for PLC Ack...")
-        # # while not plc.get_ack():
-        # #     time.sleep(0.1)
-        # print("✅ PLC ready.")
-
-        # #coords = get_vision_coordinates()
-        # #plc.send_coordinates(*coords)
-
-        # plc.set_trigger(True)
-        # time.sleep(0.2)
-        # plc.set_trigger(False)
-
-        robot.set_servo(True)
-        time.sleep(1)
-        robot.start_job('', block=True)
-        time.sleep(1)
-        robot.set_servo(False)
-
-        # Notify PLC robot done
-        # plc.set_trigger(True)
-        # time.sleep(0.2)
-        # plc.set_trigger(False)
-
-    finally:
-        #plc.stop_communication()
-        robot.stop_communication()
-        print("🔚 Program ended.")
 
 
 if __name__ == "__main__":

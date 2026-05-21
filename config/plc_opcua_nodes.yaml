@@ -1,0 +1,7 @@
+plc:
+  pregrasp_tcp: ns=3;s="GP7_Local"."PreGrasp"."TCPPosition"
+  wrist_rotate_tcp: ns=3;s="GP7_Local"."WristRotation"."TCPPosition"
+  approach_tcp: ns=3;s="GP7_Local"."Approach"."TCPPosition"
+  state_motion: ns=3;s="GP7_DynamicMotion_DB"."state_motion"
+  state_start: ns=3;s="GP7_DynamicMotion_DB"."state_start"
+  get_6D_pose_data: ns=3;s="GP7_get_6D_pose_data"
