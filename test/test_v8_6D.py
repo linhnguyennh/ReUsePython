@@ -104,6 +104,7 @@ class MotionState(IntEnum):
     MOVE_APPROACH = 3
     GRASP = 4
     STATE_5 = 5
+    
 def main():
     T_cam_to_gripper =  np.array([
         [0.0,     -1.0,   -0.3,   0.088],
@@ -168,6 +169,7 @@ def main():
 
     #KEEP MAIN ALIVE
     running = True
+    GRIPPER_WIDTH = 120 #120 mm
     try:
         while running:
             state_motion = MotionState(plc_io.get_state_motion())
@@ -178,7 +180,7 @@ def main():
                     except Empty:
                         continue
 
-                    pre_grasp_position, rxryrz, approach_vector = process_pose(pose_obj_to_cam, T_cam_to_gripper, ROBOT_Z, 0.14, 0.06, True)
+                    pre_grasp_position, rxryrz, approach_vector = process_pose(pose_obj_to_cam, T_cam_to_gripper, ROBOT_Z, 0.20, 0.20, True)
 
                     #Pad value
                     pre_grasp_position = pre_grasp_position*1000.0 #Scale to mm
@@ -188,9 +190,14 @@ def main():
                     
 
                     rx_only = rxryrz[0]
+                    #gripper_delta_y_compensate = np.sign(rx_only)*GRIPPER_WIDTH/2
                     wrist_rotation = np.zeros(8)
 
+                    #wrist_rotation[1] = gripper_delta_y_compensate
                     wrist_rotation[3] = rx_only
+
+                    approach_vector[0] = 0.0 #X to zero
+                    approach_vector[1] = 0.0 #Y to zero
 
                     approach_vector = np.pad(approach_vector, (0, 8 - len(approach_vector)), mode='constant')
                     if plc_io.get_bool_6D_pose_data():
