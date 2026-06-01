@@ -10,8 +10,8 @@ from src.vision.realsense_frame import realsense_init, realsense_get_frame
 
 def main():
     # Load your trained model
-    model = YOLO(r"models\focus1\260421\train\weights\best.pt")
-
+    #model = YOLO(r"models\focus1\260421\train\weights\best.pt")
+    model = YOLO(r"models\focus1\Focus1_YOLO11n_x1024_14112024.pt")
     # Initialize RealSense camera
     print("Initializing RealSense camera...")
     config = realsense_init(width=1280, height=720, fps=30,
@@ -32,7 +32,7 @@ def main():
             frame = np.asanyarray(color_frame.get_data())
 
             # Run inference
-            results = model(frame, conf=0.4)
+            results = model(frame, conf=0.7)
             #results[0].show()
             # Visualize results (built-in)
             annotated = results[0].plot()
