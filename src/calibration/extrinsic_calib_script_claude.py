@@ -25,10 +25,10 @@ CAM_HEIGHT = 480
 CAM_FPS = 30
 
 # Paths
-INTRINSICS_FILE = "GP7_intrinsics.npz"
-POSES_CSV = "GP7_poses.csv"
-IMAGE_DIR = "GP7_handeye_images"
-RESULT_FILE = "GP7_handeye_result.npz"
+INTRINSICS_FILE = "D435i_intrinsics.npz"
+POSES_CSV = "GP7_eye-to-hand_poses.csv"
+IMAGE_DIR = "GP7_eye-to-hand_images"
+RESULT_FILE = "GP7_eye-to-hand_result.npz"
 
 # Detection
 MIN_CORNERS = 6
@@ -769,6 +769,237 @@ def calibrate(source='csv'):
     
     return T_cam2gripper
 
+def calibrate_eye_to_hand(source='csv'):
+    """
+    Run hand-eye calibration for eye-to-hand configuration.
+    Camera is fixed in the world/base frame; calibration board is mounted on TCP.
+
+    source: 'csv' (from robot_poses.csv) or 'json' (from interactive capture)
+
+    Solves for T_cam2base: the transform from camera frame to robot base frame.
+    Robot poses fed in are inverted to base2gripper before passing to OpenCV.
+    """
+    # --- Load intrinsics ---
+    if not os.path.exists(INTRINSICS_FILE):
+        print(f"ERROR: {INTRINSICS_FILE} not found!")
+        print(f"Run intrinsic calibration first.")
+        return
+
+    intr = np.load(INTRINSICS_FILE)
+    K = intr["K"]
+    D = intr["D"]
+    print(f"Loaded intrinsics from {INTRINSICS_FILE}")
+    print(f"  fx={K[0,0]:.1f}  fy={K[1,1]:.1f}  cx={K[0,2]:.1f}  cy={K[1,2]:.1f}")
+
+    # --- Load robot poses ---
+    if source == 'csv':
+        poses = load_poses_from_csv(POSES_CSV)
+        images = sorted([
+            f for f in os.listdir(IMAGE_DIR)
+            if f.endswith('.png')
+        ])
+
+        if len(poses) != len(images):
+            print(f"\n  ⚠ WARNING: {len(poses)} poses but {len(images)} images!")
+            print(f"    They must match 1:1 in order.")
+            print(f"    Pose 1 in CSV → {IMAGE_DIR}/pose_000.png")
+            print(f"    Pose 2 in CSV → {IMAGE_DIR}/pose_001.png")
+            print(f"    etc.")
+            min_count = min(len(poses), len(images))
+            print(f"    Using first {min_count} of each.")
+            poses = poses[:min_count]
+            images = images[:min_count]
+
+        pose_image_pairs = []
+        for i, (pose, img_name) in enumerate(zip(poses, images)):
+            pose_image_pairs.append({
+                'R': pose['R'],
+                't': pose['t'],
+                'image': os.path.join(IMAGE_DIR, img_name),
+                'raw': pose['raw']
+            })
+
+    elif source == 'json':
+        with open("handeye_poses.json") as f:
+            data = json.load(f)
+
+        pose_image_pairs = []
+        for entry in data:
+            pose_image_pairs.append({
+                'R': np.array(entry['R_gripper2base']),
+                't': np.array(entry['t_gripper2base']),
+                'image': entry['image'],
+                'raw': entry['raw_mm_deg']
+            })
+
+        print(f"Loaded {len(pose_image_pairs)} poses from handeye_poses.json")
+
+    # --- Process each pose: detect board + solvePnP ---
+    # Eye-to-hand: we accumulate gripper2base first, invert later
+    R_gripper2base_list = []
+    t_gripper2base_list = []
+    R_target2cam_list = []
+    t_target2cam_list = []
+    used_indices = []
+
+    print(f"\nProcessing {len(pose_image_pairs)} pose-image pairs...")
+
+    for i, pair in enumerate(pose_image_pairs):
+        img = cv2.imread(pair['image'])
+        if img is None:
+            print(f"  ✗ Pose {i}: could not read {pair['image']}")
+            continue
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        corners, ids, _, _ = detector.detectBoard(gray)
+
+        if corners is None or len(corners) < MIN_CORNERS:
+            print(f"  ✗ Pose {i}: not enough corners ({0 if corners is None else len(corners)})")
+            continue
+
+        obj_pts, img_pts = board.matchImagePoints(corners, ids)
+        success, rvec, tvec = cv2.solvePnP(obj_pts, img_pts, K, D)
+
+        if not success:
+            print(f"  ✗ Pose {i}: solvePnP failed")
+            continue
+
+        R_t2c, _ = cv2.Rodrigues(rvec)
+
+        R_gripper2base_list.append(pair['R'])
+        t_gripper2base_list.append(pair['t'])
+        R_target2cam_list.append(R_t2c)
+        t_target2cam_list.append(tvec)
+        used_indices.append(i)
+
+        raw = pair['raw']
+        dist = np.linalg.norm(tvec) * 1000
+        print(f"  ✓ Pose {i}: {len(corners)} corners, "
+              f"board at {dist:.0f}mm, "
+              f"robot [{raw[0]:.1f}, {raw[1]:.1f}, {raw[2]:.1f}, "
+              f"{raw[3]:.1f}, {raw[4]:.1f}, {raw[5]:.1f}]")
+
+    n_valid = len(R_gripper2base_list)
+    print(f"\nValid pose pairs: {n_valid} / {len(pose_image_pairs)}")
+
+    if n_valid < 5:
+        print("ERROR: Not enough valid poses. Need at least 5 (recommend 15+).")
+        return
+
+    # --- Eye-to-hand: invert gripper2base → base2gripper ---
+    # OpenCV calibrateHandEye expects base2gripper for the eye-to-hand case.
+    # Inversion of a rigid transform: R^-1 = R^T, t^-1 = -R^T @ t
+    R_base2gripper_list = [R.T                for R    in R_gripper2base_list]
+    t_base2gripper_list = [-R.T @ t           for R, t in zip(R_gripper2base_list,
+                                                               t_gripper2base_list)]
+
+    # --- Solve with all methods ---
+    methods = {
+        "TSAI":       cv2.CALIB_HAND_EYE_TSAI,
+        "PARK":       cv2.CALIB_HAND_EYE_PARK,
+        "HORAUD":     cv2.CALIB_HAND_EYE_HORAUD,
+        "ANDREFF":    cv2.CALIB_HAND_EYE_ANDREFF,
+        "DANIILIDIS": cv2.CALIB_HAND_EYE_DANIILIDIS,
+    }
+
+    results = {}
+
+    print(f"\n{'='*70}")
+    print(f"HAND-EYE CALIBRATION RESULTS  [eye-to-hand]")
+    print(f"{'='*70}")
+    print(f"\n{'Method':<12} {'tx(mm)':>8} {'ty(mm)':>8} {'tz(mm)':>8} "
+          f"{'rot(°)':>8} {'det(R)':>8}")
+    print("-" * 62)
+
+    for name, method in methods.items():
+        # Pass base2gripper (inverted) so OpenCV solves T_cam2base
+        R_cam2base, t_cam2base = cv2.calibrateHandEye(
+            R_base2gripper_list, t_base2gripper_list,
+            R_target2cam_list,   t_target2cam_list,
+            method=method
+        )
+
+        rvec_result, _ = cv2.Rodrigues(R_cam2base)
+        angle = np.linalg.norm(rvec_result) * 180 / np.pi
+        t_mm = t_cam2base.flatten() * 1000
+        det = np.linalg.det(R_cam2base)
+
+        print(f"{name:<12} {t_mm[0]:>8.1f} {t_mm[1]:>8.1f} {t_mm[2]:>8.1f} "
+              f"{angle:>8.2f} {det:>8.4f}")
+
+        results[name] = (R_cam2base.copy(), t_cam2base.copy())
+
+    # --- Check consistency ---
+    translations = np.array([r[1].flatten() for r in results.values()]) * 1000
+    t_spread = translations.max(axis=0) - translations.min(axis=0)
+
+    print(f"\nTranslation spread across methods:")
+    print(f"  Δx = {t_spread[0]:.1f} mm")
+    print(f"  Δy = {t_spread[1]:.1f} mm")
+    print(f"  Δz = {t_spread[2]:.1f} mm")
+
+    if np.all(t_spread < 5.0):
+        print("  ✓ Methods agree — data quality is GOOD")
+    elif np.all(t_spread < 15.0):
+        print("  ○ Methods partially agree — acceptable but could be better")
+        print("    Consider: more poses, more rotation variety, check Euler convention")
+    else:
+        print("  ✗ Methods DISAGREE — likely issue with:")
+        print("    1. Euler angle convention (most common)")
+        print("    2. Not enough rotation variety in poses")
+        print("    3. Base vs World coordinate on pendant")
+        print("    4. Wrong tool frame active on pendant")
+
+    # --- Select best result (PARK is generally robust) ---
+    R_cam2base, t_cam2base = results["PARK"]
+
+    # Build 4x4
+    T_cam2base = np.eye(4)
+    T_cam2base[:3, :3] = R_cam2base
+    T_cam2base[:3, 3]  = t_cam2base.flatten()
+
+    print(f"\n{'='*70}")
+    print(f"SELECTED RESULT (PARK)  [eye-to-hand: T_cam2base]")
+    print(f"{'='*70}")
+    print(f"\nTranslation (camera origin in robot base frame):")
+    t_mm = t_cam2base.flatten() * 1000
+    print(f"  x = {t_mm[0]:>8.2f} mm")
+    print(f"  y = {t_mm[1]:>8.2f} mm")
+    print(f"  z = {t_mm[2]:>8.2f} mm")
+    print(f"  distance from base = {np.linalg.norm(t_mm):>8.2f} mm")
+
+    euler = Rotation.from_matrix(R_cam2base).as_euler('ZYX', degrees=True)
+    print(f"\nRotation (camera frame → base frame, Euler ZYX):")
+    print(f"  Rz = {euler[0]:>8.2f}°")
+    print(f"  Ry = {euler[1]:>8.2f}°")
+    print(f"  Rx = {euler[2]:>8.2f}°")
+
+    print(f"\n4×4 Transform (T_cam2base):\n{T_cam2base}")
+
+    print(f"\n→ Does the translation roughly match where the camera")
+    print(f"  is physically positioned relative to the robot BASE?")
+    print(f"  (e.g. if mounted on a tripod 800mm to the side, expect ~800mm offset)")
+
+    # --- Save ---
+    np.savez(RESULT_FILE,
+        R=R_cam2base,
+        t=t_cam2base,
+        T=T_cam2base,
+        method="PARK",
+        num_poses=n_valid,
+        board_cols=BOARD_COLS,
+        board_rows=BOARD_ROWS,
+        square_length=SQUARE_LENGTH
+    )
+    print(f"\nSaved to {RESULT_FILE}")
+
+    # --- Run validation ---
+    validate(R_cam2base, t_cam2base,
+             R_base2gripper_list, t_base2gripper_list,
+             R_target2cam_list,   t_target2cam_list)
+
+    return T_cam2base
+
 
 # ============================================================
 # STEP 4: VALIDATE
@@ -1010,33 +1241,43 @@ def verify_euler():
 
 if __name__ == "__main__":
     commands = {
-        'capture':     ('Capture images (enter poses in CSV later)', capture_images),
-        'interactive': ('Capture images + enter poses live',         capture_interactive),
-        'calibrate':   ('Run calibration from CSV',                  lambda: calibrate('csv')),
-        'calibrate_json': ('Run calibration from JSON',              lambda: calibrate('json')),
-        'verify_live': ('Live verification',                         verify_live),
-        'verify_euler': ('Verify Euler convention',                  verify_euler),
+        'capture':              ('Capture images (enter poses in CSV later)', capture_images),
+        'interactive':          ('Capture images + enter poses live',         capture_interactive),
+        'calibrate':            ('Run calibration from CSV (eye-in-hand)',     lambda: calibrate('csv')),
+        'calibrate_json':       ('Run calibration from JSON (eye-in-hand)',    lambda: calibrate('json')),
+        'calibrate_e2h':        ('Run calibration from CSV (eye-to-hand)',     lambda: calibrate_eye_to_hand('csv')),
+        'calibrate_e2h_json':   ('Run calibration from JSON (eye-to-hand)',    lambda: calibrate_eye_to_hand('json')),
+        'verify_live':          ('Live verification',                          verify_live),
+        'verify_euler':         ('Verify Euler convention',                    verify_euler),
     }
-    
+
     if len(sys.argv) < 2 or sys.argv[1] not in commands:
         print("Usage:")
         print(f"  python {sys.argv[0]} <command>\n")
         print("Commands:")
         for cmd, (desc, _) in commands.items():
-            print(f"  {cmd:<18s} — {desc}")
+            print(f"  {cmd:<22s} — {desc}")
         print()
-        print("Typical workflow:")
-        print(f"  1. python {sys.argv[0]} verify_euler      ← do this FIRST")
-        print(f"  2. python {sys.argv[0]} interactive       ← capture + enter poses")
-        print(f"  3. python {sys.argv[0]} calibrate_json   ← run calibration")
-        print(f"  4. python {sys.argv[0]} verify_live      ← check result")
-        print()
-        print("OR:")
+        print("Typical workflow (eye-in-hand):")
         print(f"  1. python {sys.argv[0]} verify_euler")
-        print(f"  2. python {sys.argv[0]} capture          ← capture images only")
+        print(f"  2. python {sys.argv[0]} interactive")
+        print(f"  3. python {sys.argv[0]} calibrate_json")
+        print(f"  4. python {sys.argv[0]} verify_live")
+        print()
+        print("Typical workflow (eye-to-hand):")
+        print(f"  1. python {sys.argv[0]} verify_euler")
+        print(f"  2. python {sys.argv[0]} interactive      ← board must be on TCP")
+        print(f"  3. python {sys.argv[0]} calibrate_e2h_json")
+        print(f"  4. python {sys.argv[0]} verify_live")
+        print()
+        print("OR (CSV workflow):")
+        print(f"  1. python {sys.argv[0]} verify_euler")
+        print(f"  2. python {sys.argv[0]} capture")
         print(f"  3. Fill in {POSES_CSV} with pendant values")
-        print(f"  4. python {sys.argv[0]} calibrate        ← run calibration")
+        print(f"  4. python {sys.argv[0]} calibrate        ← eye-in-hand")
+        print(f"     python {sys.argv[0]} calibrate_e2h   ← eye-to-hand")
+        print()
         sys.exit(0)
-    
+
     cmd = sys.argv[1]
     commands[cmd][1]()
