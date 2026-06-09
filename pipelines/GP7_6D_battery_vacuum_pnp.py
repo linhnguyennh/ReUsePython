@@ -150,8 +150,10 @@ def main():
     plc_url = "opc.tcp://192.168.0.1:4840"
     plc_client = OPCUAClient(plc_url)
 
+    #Generate node map from yaml
     node_map = PLCNodeMap(plc_client, r"C:\Users\lin40269\Desktop\Linh (Desktop)\01_Python\realsense\config\plc_opcua_nodes.yaml")
     
+    #Python to PLC interface for setting and getting of variables
     plc_io = PLCInterface(node_map,plc_client)
 
     #START THREADS
@@ -166,7 +168,6 @@ def main():
 
     #KEEP MAIN ALIVE
     running = True
-    GRIPPER_WIDTH = 120 #120 mm
     try:
         while running:
             state_motion = MotionState(plc_io.get_state_motion())
