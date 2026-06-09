@@ -23,10 +23,10 @@ import sys
 import os
 import cv2
 import numpy as np
-
+import pyrealsense2 as rs
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.vision.realsense_frame import realsense_init, realsense_get_frame
-from src.utils.draw_rs import draw_depth
+from src.utils.visualise_frame import draw_depth
 # ---------------------------------------------------------------------------
 # Mode switch — True = long edge, False = short edge
 # ---------------------------------------------------------------------------
@@ -179,6 +179,7 @@ def main():
 
             frame = np.asanyarray(color_frame.get_data())
 
+            #PIPELINE: Select ROI (Base on SHORT OR LONG) --> Detect EDGE + Smoothing --> Filter by depth --> Generate Endpoints --> TODO: GENERATE MOVEMENT VECTOR --> SEND TO ROBOT 
             # Active ROI config
             mode_key = "long" if IS_LONG_EDGE else "short"
             cfg      = ROI_CONFIG[mode_key]
@@ -199,7 +200,7 @@ def main():
                                + (1 - SMOOTH_ALPHA) * seam_row_global)
             seam_row_int = int(round(seam_row_smooth))
 
-            depth_data = np.asanyarray(depth_frame.get_data())
+            
 
             
 
@@ -207,6 +208,7 @@ def main():
             cut_row_int = seam_row_int - CUT_OFFSET_PX
             
             #Filter depth
+            depth_data = np.asanyarray(depth_frame.get_data())
             cut_depths = depth_data[cut_row_int, x0:x1] * config.depth_scale
             valid_mask = (cut_depths > DEPTH_MIN) & (cut_depths < DEPTH_MAX)
 
@@ -216,6 +218,11 @@ def main():
                 x_left  = x0 + valid_cols[0]
                 x_right = x0 + valid_cols[-1]
 
+                #--> Pixel value at end points
+                # Get 3D by deprojecting with depth
+                p3d_left = rs.rs2_deproject_pixel_to_point(config.depth_intrinsics,[x_left, cut_row_int], cut_depths[valid_cols[0]])
+
+                p3d_right = rs.rs2_deproject_pixel_to_point(config.depth_intrinsics,[x_right, cut_row_int], cut_depths[valid_cols[-1]])
 
             # Delta: how far cut target is from spindle centerline
             delta_px = cut_row_int - y_spindle
@@ -250,6 +257,16 @@ def main():
             cv2.putText(vis, f"cut  ({CUT_OFFSET_PX}px offset)",
                         (x1 + 4, cut_row_int + 4),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 100, 255), 1)
+
+            # Format left 3D coordinate text (Converting meters to mm for readability)
+            if len(valid_cols) > 0:
+                left_str = f"L: ({p3d_left[0]*1000:.0f}, {p3d_left[1]*1000:.0f}, {p3d_left[2]*1000:.0f})mm"
+                cv2.putText(vis, left_str, (x_left - 180, cut_row_int - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 100, 255), 1)
+
+                right_str = f"R: ({p3d_right[0]*1000:.0f}, {p3d_right[1]*1000:.0f}, {p3d_right[2]*1000:.0f})mm"
+                cv2.putText(vis, right_str, (x_right + 10, cut_row_int - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 100, 255), 1)
 
             # Offset arrow: spindle → cut target
             if abs(delta_px) > 2:

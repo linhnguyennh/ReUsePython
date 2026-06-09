@@ -151,3 +151,13 @@ class RealSenseStream:
             Queue: The internal frame queue.
         """
         return self._frame_queue
+    
+    @property
+    def config(self):
+        """
+        Get the camera config object.
+
+        Returns:
+            RealSenseConfig: camera config object
+        """
+        return self._config

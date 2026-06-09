@@ -1,15 +1,10 @@
-import sys
-import os
 import cv2
 import numpy as np
 import pyrealsense2 as rs
 
-from config.common import ROOT_DIR
-sys.path.insert(0, str(ROOT_DIR))
-
 from src.vision.realsense_frame import realsense_init, realsense_get_frame
-from src.utils.draw_rs import draw_depth
-
+from src.utils.visualise_frame import draw_depth
+from config.gp7_cut_config import CUT_OFFSET_PX
 
 # ---------------------------------------------------------------------------
 # Detection
@@ -41,7 +36,7 @@ def detect_seam(gray_roi: np.ndarray) -> tuple[int, np.ndarray, np.ndarray]:
 # ---------------------------------------------------------------------------
 
 def draw_profile_panel(profile: np.ndarray, peak_row: int,
-                       panel_h: int, panel_w: int = PROFILE_WIDTH) -> np.ndarray:
+                       panel_h: int, panel_w: int, cut_offset: int) -> np.ndarray:
     """Render 1D profile as a horizontal bar chart panel."""
     panel = np.zeros((panel_h, panel_w, 3), dtype=np.uint8)
     if profile.max() < 1e-6:
@@ -62,7 +57,7 @@ def draw_profile_panel(profile: np.ndarray, peak_row: int,
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
 
     # Cut offset line
-    cut_row = peak_row - CUT_OFFSET_PX
+    cut_row = peak_row - cut_offset
     if 0 <= cut_row < len(profile):
         cut_y = int(cut_row * panel_h / len(profile))
         cv2.line(panel, (0, cut_y), (panel_w, cut_y), (0, 100, 255), 1)
@@ -72,14 +67,14 @@ def draw_profile_panel(profile: np.ndarray, peak_row: int,
     return panel
 
 
-def build_sobel_vis(sobel_raw: np.ndarray, peak_local: int) -> np.ndarray:
+def build_sobel_vis(sobel_raw: np.ndarray, peak_local: int, cut_offset : int) -> np.ndarray:
     if sobel_raw.max() > 0:
         vis = (255 * sobel_raw / sobel_raw.max()).astype(np.uint8)
     else:
         vis = np.zeros_like(sobel_raw, dtype=np.uint8)
     vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
     cv2.line(vis, (0, peak_local), (vis.shape[1], peak_local), (0, 255, 0), 2)
-    cut_row = peak_local - CUT_OFFSET_PX
+    cut_row = peak_local - cut_offset
     if 0 <= cut_row < vis.shape[0]:
         cv2.line(vis, (0, cut_row), (vis.shape[1], cut_row), (0, 100, 255), 2)
     return vis

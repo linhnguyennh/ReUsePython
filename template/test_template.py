@@ -4,8 +4,6 @@ import logging
 from pathlib import Path
 import time
 
-# Add the project root to the sys.path
-
 from src.vision.realsense_stream import RealSenseStream
 from config.common import CAM_WIDTH, CAM_HEIGHT, CAM_FPS
 
