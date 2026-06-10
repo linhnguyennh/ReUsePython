@@ -10,7 +10,7 @@ SMOOTH_ALPHA    = 0.6     # EMA smoothing on seam row (0=no smooth, 1=frozen)
 PROFILE_WIDTH   = 200     # width of the profile panel in the display
 DEPTH_MIN = 0.1
 DEPTH_MAX = 0.30
-
+ROI_Y_OFFSET = 100
 # Cut offset: how many px ABOVE the detected seam the cut target should be.
 # Positive = shift upward in image (toward smaller row index = toward casing body).
 # Set to 0 to cut exactly at the seam.

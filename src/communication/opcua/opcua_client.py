@@ -240,6 +240,13 @@ class PLCInterface:
 
     def get_bool_6D_pose_data(self):
          return self.io.get_node_value(self.nodes['plc']['get_6D_pose_data'])   
+    
+    def set_point_to_marker(self, value: list[float]):
+        self.io.set_node_value(self.nodes['plc']['point_to_marker'], value, ua.VariantType.Float)
+
+    def set_right_to_left(self, value: list[float]):
+        self.io.set_node_value(self.nodes['plc']['right_to_left'], value, ua.VariantType.Float)
+
 # ────────────────────────────────────────────────────────────────
 # 🚀 Main program
 # ────────────────────────────────────────────────────────────────
@@ -266,14 +273,14 @@ def test_plc_comm():
         plc_io = PLCInterface(node_map,plc_client)
 
         print(plc_io.nodes)
-        print(plc_client.get_node_value(plc_io.nodes['plc']['pregrasp_tcp']))
-        plc_client.set_node_value(plc_io.nodes['plc']['pregrasp_tcp'], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], ua.VariantType.Float)
-        print(plc_client.get_node_value(plc_io.nodes['plc']['pregrasp_tcp']))
+        print(plc_client.get_node_value(plc_io.nodes['plc']['right_to_left']))
+        plc_client.set_node_value(plc_io.nodes['plc']['right_to_left'], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], ua.VariantType.Float)
+        print(plc_client.get_node_value(plc_io.nodes['plc']['right_to_left']))
 
-        plc_io.set_wrist_rotation_tcp([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        #plc_io.set_wrist_rotation_tcp([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         print("STATE_MOTION: ",plc_io.get_state_motion())
     finally:
-
+        # plc_client.set_node_value(plc_io.nodes['plc']['right_to_left'], [0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], ua.VariantType.Float)
         plc_client.stop_communication()
 
 
@@ -281,7 +288,8 @@ def test_plc_comm():
 
 
 def main():
-    test_plc_comm()
+    #test_plc_comm()
+    test_robot_comm()
 
 
 

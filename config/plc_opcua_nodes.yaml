@@ -5,3 +5,5 @@ plc:
   state_motion: ns=3;s="GP7_DynamicMotion_DB"."state_motion"
   state_start: ns=3;s="GP7_DynamicMotion_DB"."state_start"
   get_6D_pose_data: ns=3;s="GP7_get_6D_pose_data"
+  point_to_marker: ns=3;s="GP7_Local"."Point_to_Marker"."TCPPosition"
+  right_to_left: ns=3;s="GP7_Local"."Right_to_Left"."TCPPosition"

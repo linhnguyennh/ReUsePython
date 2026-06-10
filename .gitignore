@@ -17,4 +17,4 @@ runs
 intrinsic_images/
 .vscode/
 
-reusepython.egg_info/
+*.egg-info/
