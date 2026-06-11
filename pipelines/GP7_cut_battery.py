@@ -10,7 +10,7 @@ from queue import Empty
 
 from config.common import CAM_WIDTH, CAM_HEIGHT, CAM_FPS, PLC_URL, ROBOT_URL, NODE_MAP_PATH
 from config.gp7_cut_config import ROI_CONFIG, SEARCH_BAND_PX, ROI_Y_OFFSET, SMOOTH_ALPHA, CUT_OFFSET_PX, DEPTH_MIN, DEPTH_MAX, PROFILE_WIDTH
-from config.vectors_matrices import MARKER_TIP_IN_CAM, T_CAM_TO_BASE_GP7_SPINDLE
+from config.vectors_matrices import MARKER_TIP_IN_CAM, R_CAM_TO_BASE_GP7_SPINDLE
 
 from src.vision.realsense_stream import RealSenseStream
 from src.vision.seam_detect import detect_seam, build_sobel_vis, draw_profile_panel
@@ -92,13 +92,13 @@ def process_seam(rgb_data : np.ndarray, depth_data : np.ndarray, cam_config, roi
 
         #--> Pixel value at end points
         # Get 3D by deprojecting with depth (in meter)
-        p3d_left = rs.rs2_deproject_pixel_to_point(cam_config.depth_intrinsics,[x_cut_left, y_cut], cut_depths[valid_cols[0]])
+        #NOTE: USE COLOR INTRINSIC BECAUSE DEPTH CAMERA IS ALIGNED TO COLOR
+        p3d_left = rs.rs2_deproject_pixel_to_point(cam_config.color_intrinsics,[x_cut_left, y_cut], cut_depths[valid_cols[0]])
 
-        p3d_right = rs.rs2_deproject_pixel_to_point(cam_config.depth_intrinsics,[x_cut_right, y_cut], cut_depths[valid_cols[-1]])
+        p3d_right = rs.rs2_deproject_pixel_to_point(cam_config.color_intrinsics,[x_cut_right, y_cut], cut_depths[valid_cols[-1]])
 
-        p3d_left = p3d_left * 1000.0 #Convert to mm
-        p3d_right = p3d_right * 1000.0 #Convert to mm
-    
+        p3d_left = np.array(p3d_left, dtype=np.float32) * 1000.0 #Convert to mm
+        p3d_right = np.array(p3d_right, dtype=np.float32) * 1000.0 #Convert to mm
     else:
         p3d_left = None
         p3d_right = None
@@ -149,11 +149,11 @@ def visualise_seam(rgb_data : np.ndarray, depth_data : np.ndarray, seam : Seam, 
 
     # Format left 3D coordinate text (Converting meters to mm for readability)
     if seam.p3d_left is not None and seam.p3d_right is not None:
-        left_str = f"L: ({seam.p3d_left[0]*1000:.0f}, {seam.p3d_left[1]*1000:.0f}, {seam.p3d_left[2]*1000:.0f})mm"
+        left_str = f"L: ({seam.p3d_left[0]:.0f}, {seam.p3d_left[1]:.0f}, {seam.p3d_left[2]:.0f})mm"
         cv2.putText(vis, left_str, (seam.x_cut_left - 180, seam.y_cut - 8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 100, 255), 1)
 
-        right_str = f"R: ({seam.p3d_right[0]*1000:.0f}, {seam.p3d_right[1]*1000:.0f}, {seam.p3d_right[2]*1000:.0f})mm"
+        right_str = f"R: ({seam.p3d_right[0]:.0f}, {seam.p3d_right[1]:.0f}, {seam.p3d_right[2]:.0f})mm"
         cv2.putText(vis, right_str, (seam.x_cut_right + 10, seam.y_cut - 8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 100, 255), 1)
     print(f"\r[{seam.roi.mode_label}]  "
@@ -166,7 +166,6 @@ def main():
     #CAM INIT
     rs_stream = RealSenseStream(
         width=CAM_WIDTH, height=CAM_HEIGHT, fps=CAM_FPS,
-        enable_spatial=True,
         enable_temporal=True,
     )
     
@@ -206,6 +205,7 @@ def main():
 
     # PUT THREAD INIT HERE #
     try:
+        robot_GP7.set_servo(True)
         while True:
             try:
                 rgb_frame, depth_frame = frame_queue.get()
@@ -226,10 +226,49 @@ def main():
             #--> TODO: GENERATE MOVEMENT VECTOR --> SEND TO ROBOT 
 
             #NEED: Vector from first point (p3d_right) to marker tip --> MOVE
-            point_to_marker = make_3d_vector(seam.p3d_right, MARKER_TIP_IN_CAM) #Vector from cutting line endpoint to marker tip
-            ptm_in_base = rotate_vector_to_frame(point_to_marker, T_CAM_TO_BASE_GP7_SPINDLE)
+            #GOING FROM RIGHT EDGE TO REACH MARKER TIP 
+            if plc_io.get_bool_up():
+                time.sleep(0.2)
+                robot_GP7.start_job('MARKER_SHORT_UP', block=True)
+            if plc_io.get_bool_down():
+                time.sleep(0.2)
+                robot_GP7.start_job('MARKER_SHORT_DOWN', block=True)
+            if plc_io.get_bool_left():
+                time.sleep(0.2)
+                robot_GP7.start_job('MARKER_LONG_LEFT', block=True)
+            if plc_io.get_bool_right():
+                time.sleep(0.2)
+                robot_GP7.start_job('MARKER_LONG_RIGHT', block=True)
+            if plc_io.get_bool_findedge():
+                try:
+                    point_to_marker = make_3d_vector(seam.p3d_right, MARKER_TIP_IN_CAM) #Vector from cutting line endpoint to marker tip
+                    ptm_in_base = rotate_vector_to_frame(point_to_marker, R_CAM_TO_BASE_GP7_SPINDLE)
 
+                    ptm_arr_float = np.zeros(8)
+                    ptm_arr_float[:3] = ptm_in_base
+                    ptm_arr_float = ptm_arr_float.tolist()
+                    
+                    # print(f"p3d_right: {seam.p3d_right}")
+                    # print(f"Converted p3d_right: {ptm_arr_float}")
+                    plc_io.set_point_to_marker(ptm_arr_float)
+                except Exception as e:
+                    logger.error(f"{e}")
 
+                #GOING FROM RIGHT EDGE TO LEFT EDGE
+                try:
+                    #start is left and end is right because robot control
+                    right_to_left = make_3d_vector(seam.p3d_left, seam.p3d_right) #Vector from cutting line endpoint to marker tip
+                    rtl_in_base = rotate_vector_to_frame(right_to_left, R_CAM_TO_BASE_GP7_SPINDLE)
+
+                    rtl_arr_float = np.zeros(8)
+                    rtl_arr_float[:3] = rtl_in_base
+                    rtl_arr_float = rtl_arr_float.tolist()
+                    
+                    # print(f"p3d_right: {seam.p3d_right}")
+                    # print(f"Converted p3d_right: {ptm_arr_float}")
+                    plc_io.set_right_to_left(rtl_arr_float)
+                except Exception as e:
+                    logger.error(f"{e}")
 
             #NEED: Vector from current position (marker tip) to end point --> MOVE
             
@@ -258,6 +297,8 @@ def main():
         plc_client.stop_communication()
         cv2.destroyAllWindows()
         logger.info("All threads terminated")
+    finally:
+        robot_GP7.stop_communication()
 
 if __name__ == '__main__':
     main()

@@ -153,6 +153,8 @@ def realsense_get_frame(config):
 
     if not color_frame or not depth_frame:
         return None, None
+    
+    aligned_depth_intrinsics = depth_frame.get_profile().as_video_stream_profile().get_intrinsics()
 
     # Apply depth filters if enabled
     if config.decimation_filter:

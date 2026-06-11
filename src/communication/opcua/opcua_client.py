@@ -168,7 +168,7 @@ class Yaskawa_YRC1000(OPCUAClient):
 
     def init_nodes(self):
         """Initialize Yaskawa-specific nodes."""
-        self.running_var = self.get_node(
+        self.running_var = self.node(
             "ns=5;s=MotionDeviceSystem.Controllers.Controller_1.ParameterSet.IsRunning")
         self.controller_obj = self.client.nodes.root.get_child([
             "0:Objects",
@@ -246,7 +246,16 @@ class PLCInterface:
 
     def set_right_to_left(self, value: list[float]):
         self.io.set_node_value(self.nodes['plc']['right_to_left'], value, ua.VariantType.Float)
-
+    def get_bool_up(self):
+        return self.io.get_node_value(self.nodes['plc']['bUp']) 
+    def get_bool_down(self):
+        return self.io.get_node_value(self.nodes['plc']['bDown']) 
+    def get_bool_left(self):
+        return self.io.get_node_value(self.nodes['plc']['bLeft']) 
+    def get_bool_right(self):
+        return self.io.get_node_value(self.nodes['plc']['bRight']) 
+    def get_bool_findedge(self):
+        return self.io.get_node_value(self.nodes['plc']['bFindEdge']) 
 # ────────────────────────────────────────────────────────────────
 # 🚀 Main program
 # ────────────────────────────────────────────────────────────────
@@ -255,8 +264,8 @@ def test_robot_comm():
             robot_url = "opc.tcp://192.168.0.56:16448"
             robot = Yaskawa_YRC1000(robot_url)
             robot.set_servo(True)
-            # time.sleep(1)
-            # robot.start_job('', block=True)
+            time.sleep(1)
+            robot.start_job('MARKER_SHORT_UP', block=True)
             time.sleep(1)
             robot.set_servo(False)
         finally:
