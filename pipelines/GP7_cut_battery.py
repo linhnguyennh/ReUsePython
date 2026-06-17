@@ -9,8 +9,8 @@ from queue import Empty
 #CUSTOM
 
 from config.common import CAM_WIDTH, CAM_HEIGHT, CAM_FPS, PLC_URL, ROBOT_URL, NODE_MAP_PATH
-from config.gp7_cut_config import ROI_CONFIG, SEARCH_BAND_PX, ROI_Y_OFFSET, SMOOTH_ALPHA, CUT_OFFSET_PX, DEPTH_MIN, DEPTH_MAX, PROFILE_WIDTH
-from config.vectors_matrices import MARKER_TIP_IN_CAM, R_CAM_TO_BASE_GP7_SPINDLE
+from config.gp7_cut_config import ROI_CONFIG, SEARCH_BAND_PX, ROI_Y_OFFSET, SMOOTH_ALPHA, CUT_OFFSET_PX, DEPTH_MIN, DEPTH_MAX, PROFILE_WIDTH, ENABLE_PLC_CONNECTION, ENABLE_ROBOT_CONNECTION
+from config.vectors_matrices import MARKER_TIP_IN_CAM, R_CAM_TO_BASE_GP7_SPINDLE, EXTEND_MARKER_TIP
 
 from src.vision.realsense_stream import RealSenseStream
 from src.vision.seam_detect import detect_seam, build_sobel_vis, draw_profile_panel
@@ -166,7 +166,7 @@ def main():
     #CAM INIT
     rs_stream = RealSenseStream(
         width=CAM_WIDTH, height=CAM_HEIGHT, fps=CAM_FPS,
-        enable_temporal=True,
+        enable_decimation = False, enable_spatial = True, enable_temporal = True, enable_hole_filling = True, enable_depth_to_disparity = True, enable_disparity_to_depth = True
     )
     
     cam_config = rs_stream.config
@@ -185,19 +185,30 @@ def main():
         roi_color=ROI_CONFIG['short']['color']
     )
     
-    #ROBOT OPCUA INIT
-    robot_GP7 = Yaskawa_YRC1000(ROBOT_URL)
-
-    #PLC OPCUA INIT
-    plc_client = OPCUAClient(PLC_URL)
-    node_map = PLCNodeMap(plc_client,NODE_MAP_PATH)
-    plc_io = PLCInterface(node_map,plc_client)
+    if ENABLE_ROBOT_CONNECTION:
+        try:
+            #ROBOT OPCUA INIT
+            robot_GP7 = Yaskawa_YRC1000(ROBOT_URL)
+            robot_GP7.set_servo(True)
+        except Exception as e:
+            logger.error(f"{e}")
+    else:
+        robot_GP7 = None
+    
+    if ENABLE_PLC_CONNECTION:
+        try:
+            #PLC OPCUA INIT
+            plc_client = OPCUAClient(PLC_URL)
+            node_map = PLCNodeMap(plc_client,NODE_MAP_PATH)
+            plc_io = PLCInterface(node_map,plc_client)
+        except Exception as e:
+            logger.error(f"{e}")
+    else:
+        plc_client = None
     
     #CONSTANTS
     global IS_LONG_EDGE 
     IS_LONG_EDGE = True
-
-    
     y_seam_smooth = None
     
     # START CAM THREAD
@@ -205,7 +216,6 @@ def main():
 
     # PUT THREAD INIT HERE #
     try:
-        robot_GP7.set_servo(True)
         while True:
             try:
                 rgb_frame, depth_frame = frame_queue.get()
@@ -227,48 +237,47 @@ def main():
 
             #NEED: Vector from first point (p3d_right) to marker tip --> MOVE
             #GOING FROM RIGHT EDGE TO REACH MARKER TIP 
-            if plc_io.get_bool_up():
-                time.sleep(0.2)
-                robot_GP7.start_job('MARKER_SHORT_UP', block=True)
-            if plc_io.get_bool_down():
-                time.sleep(0.2)
-                robot_GP7.start_job('MARKER_SHORT_DOWN', block=True)
-            if plc_io.get_bool_left():
-                time.sleep(0.2)
-                robot_GP7.start_job('MARKER_LONG_LEFT', block=True)
-            if plc_io.get_bool_right():
-                time.sleep(0.2)
-                robot_GP7.start_job('MARKER_LONG_RIGHT', block=True)
-            if plc_io.get_bool_findedge():
-                try:
-                    point_to_marker = make_3d_vector(seam.p3d_right, MARKER_TIP_IN_CAM) #Vector from cutting line endpoint to marker tip
-                    ptm_in_base = rotate_vector_to_frame(point_to_marker, R_CAM_TO_BASE_GP7_SPINDLE)
+            if plc_client is not None and robot_GP7 is not None:
+                if plc_io.get_bool_up():
+                    time.sleep(0.2)
+                    robot_GP7.start_job('MARKER_SHORT_UP', block=True)
+                if plc_io.get_bool_down():
+                    time.sleep(0.2)
+                    robot_GP7.start_job('MARKER_SHORT_DOWN', block=True)
+                if plc_io.get_bool_left():
+                    time.sleep(0.2)
+                    robot_GP7.start_job('MARKER_LONG_LEFT', block=True)
+                if plc_io.get_bool_right():
+                    time.sleep(0.2)
+                    robot_GP7.start_job('MARKER_LONG_RIGHT', block=True)
+                if plc_io.get_bool_findedge():
+                    try:
+                        point_to_marker = make_3d_vector(seam.p3d_right, EXTEND_MARKER_TIP) #Vector from cutting line endpoint to marker tip
+                        ptm_in_base = rotate_vector_to_frame(point_to_marker, R_CAM_TO_BASE_GP7_SPINDLE)
 
-                    ptm_arr_float = np.zeros(8)
-                    ptm_arr_float[:3] = ptm_in_base
-                    ptm_arr_float = ptm_arr_float.tolist()
-                    
-                    # print(f"p3d_right: {seam.p3d_right}")
-                    # print(f"Converted p3d_right: {ptm_arr_float}")
-                    plc_io.set_point_to_marker(ptm_arr_float)
-                except Exception as e:
-                    logger.error(f"{e}")
+                        ptm_arr_float = np.zeros(8)
+                        ptm_arr_float[:3] = ptm_in_base
+                        ptm_arr_float = ptm_arr_float.tolist()
+                        
+                        # print(f"p3d_right: {seam.p3d_right}")
+                        # print(f"Converted p3d_right: {ptm_arr_float}")
+                        plc_io.set_point_to_marker(ptm_arr_float)
+                    except Exception as e:
+                        logger.error(f"{e}")
 
-                #GOING FROM RIGHT EDGE TO LEFT EDGE
-                try:
-                    #start is left and end is right because robot control
-                    right_to_left = make_3d_vector(seam.p3d_left, seam.p3d_right) #Vector from cutting line endpoint to marker tip
-                    rtl_in_base = rotate_vector_to_frame(right_to_left, R_CAM_TO_BASE_GP7_SPINDLE)
+                    #GOING FROM RIGHT EDGE TO LEFT EDGE
+                    try:
+                        #start is left and end is right because robot control
+                        right_to_left = make_3d_vector(seam.p3d_left, seam.p3d_right) #Vector from cutting line endpoint to marker tip
+                        rtl_in_base = rotate_vector_to_frame(right_to_left, R_CAM_TO_BASE_GP7_SPINDLE)
 
-                    rtl_arr_float = np.zeros(8)
-                    rtl_arr_float[:3] = rtl_in_base
-                    rtl_arr_float = rtl_arr_float.tolist()
-                    
-                    # print(f"p3d_right: {seam.p3d_right}")
-                    # print(f"Converted p3d_right: {ptm_arr_float}")
-                    plc_io.set_right_to_left(rtl_arr_float)
-                except Exception as e:
-                    logger.error(f"{e}")
+                        rtl_arr_float = np.zeros(8)
+                        rtl_arr_float[:3] = rtl_in_base
+                        rtl_arr_float = rtl_arr_float.tolist()
+                        
+                        plc_io.set_right_to_left(rtl_arr_float)
+                    except Exception as e:
+                        logger.error(f"{e}")
 
             #NEED: Vector from current position (marker tip) to end point --> MOVE
             
@@ -293,12 +302,17 @@ def main():
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt triggered...")
         rs_stream.stop()
-        robot_GP7.stop_communication()
-        plc_client.stop_communication()
+        if robot_GP7 is not None:
+            robot_GP7.stop_communication()
+        if plc_client is not None:
+            plc_client.stop_communication()
         cv2.destroyAllWindows()
         logger.info("All threads terminated")
     finally:
-        robot_GP7.stop_communication()
+        if robot_GP7 is not None:
+            robot_GP7.stop_communication()
+        if plc_client is not None:
+            plc_client.stop_communication()
 
 if __name__ == '__main__':
     main()
