@@ -21,8 +21,8 @@ class RealSenseStream:
         running (bool): Flag indicating if the capture thread is running.
     """
 
-    def __init__(self, width=640, height=480, fps=15, enable_imu=False, max_queue_size=1,
-                 enable_decimation=False, enable_spatial=False, enable_temporal=False, enable_hole_filling=False):
+    def __init__(self, width=640, height=480, fps=15, max_queue_size=1,
+                 **kwarg):
         """
         Initialize the RealSense stream.
 
@@ -36,8 +36,7 @@ class RealSenseStream:
             enable_spatial (bool): Whether to enable spatial filter. Defaults to False.
             enable_temporal (bool): Whether to enable temporal filter. Defaults to False.
         """
-        self._config = realsense_init(width, height, fps, enable_imu, 
-                                      enable_decimation, enable_spatial, enable_temporal, enable_hole_filling)
+        self._config = realsense_init(width, height, fps,**kwarg)
         self._frame_queue = Queue(maxsize=max_queue_size)
         self._width = width
         self._height = height

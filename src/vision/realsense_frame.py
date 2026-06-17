@@ -2,6 +2,7 @@ import pyrealsense2 as rs
 import cv2
 import numpy as np
 from dataclasses import dataclass
+from config import d435i_config
 
 @dataclass
 class RealSenseConfig:
@@ -68,9 +69,9 @@ def realsense_init(width = 1280, height = 720, fps = 15, enable_imu = False,
     depth_sensor.set_option(rs.option.visual_preset, rs.rs400_visual_preset.default)
 
     #depth_sensor.set_option(rs.option.enable_auto_exposure, 0)
-    depth_sensor.set_option(rs.option.exposure, 1000)
-    depth_sensor.set_option(rs.option.gain, 16)
-    depth_sensor.set_option(rs.option.laser_power, 360)
+    depth_sensor.set_option(rs.option.exposure, d435i_config.EXPOSURE)
+    depth_sensor.set_option(rs.option.gain, d435i_config.GAIN)
+    depth_sensor.set_option(rs.option.laser_power, d435i_config.LASER_POWER)
 
     color_profile = profile.get_stream(rs.stream.color).as_video_stream_profile()
     depth_profile = profile.get_stream(rs.stream.depth).as_video_stream_profile()
@@ -131,7 +132,7 @@ def realsense_init(width = 1280, height = 720, fps = 15, enable_imu = False,
 
 
 
-def realsense_get_frame(config):
+def realsense_get_frame(config : RealSenseConfig):
     """
     Get aligned color and depth frames from the RealSense camera.
     
@@ -154,17 +155,23 @@ def realsense_get_frame(config):
     if not color_frame or not depth_frame:
         return None, None
     
-    aligned_depth_intrinsics = depth_frame.get_profile().as_video_stream_profile().get_intrinsics()
 
     # Apply depth filters if enabled
     if config.decimation_filter:
         depth_frame = config.decimation_filter.process(depth_frame)
     
+    if config.depth_to_disparity:
+        depth_frame = config.depth_to_disparity.process(depth_frame)
+
     if config.spatial_filter:
         depth_frame = config.spatial_filter.process(depth_frame)
     
     if config.temporal_filter:
         depth_frame = config.temporal_filter.process(depth_frame)
+    
+    if config.disparity_to_depth:
+        depth_frame = config.disparity_to_depth.process(depth_frame)
+
     if config.hole_filling_filter:
         depth_frame = config.hole_filling_filter.process(depth_frame)
     
