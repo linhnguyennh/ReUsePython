@@ -16,8 +16,8 @@ ROI_Y_OFFSET = 100
 # Set to 0 to cut exactly at the seam.
 CUT_OFFSET_PX   = 20      # px above seam → on the casing body
 
-ENABLE_PLC_CONNECTION = False
-ENABLE_ROBOT_CONNECTION = False 
+ENABLE_PLC_CONNECTION = True
+ENABLE_ROBOT_CONNECTION = True 
 #---------------------------------------------------------------------------
 # Per-mode ROI config
 # ---------------------------------------------------------------------------

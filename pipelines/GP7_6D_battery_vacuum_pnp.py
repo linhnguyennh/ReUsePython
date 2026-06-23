@@ -14,6 +14,7 @@ from src.vision.pipeline_workers import SegmentationWorker
 from src.utils.logger_helper import log_title
 from src.pose.pose_process_fn import *
 from src.communication.opcua.opcua_client import PLCClient, PLCInterface, PLCNodeMap, OPCUAClient
+from config.vectors_matrices import T_CAM_TO_GRIPPER_GP7_ONHAND
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -103,12 +104,7 @@ class MotionState(IntEnum):
     STATE_5 = 5
     
 def main():
-    T_cam_to_gripper =  np.array([
-        [0.0,     -1.0,   -0.3,   0.088],
-        [1.0,      0.0,  0.013,  -0.035],
-        [-0.01,   -0.3,   0.95,  -0.041],
-        [0.0,      0.0,    0.0,     1.0]
-    ])
+    T_cam_to_gripper = T_CAM_TO_GRIPPER_GP7_ONHAND
 
     ROBOT_X = np.array([1,0,0])
     ROBOT_Z = np.array([0,0,1])
@@ -178,14 +174,14 @@ def main():
                     except Empty:
                         continue
 
-                    pre_grasp_position, rxryrz, approach_vector = process_pose(pose_obj_to_cam, T_cam_to_gripper, ROBOT_Z, 0.20, 0.20, True)
+                    pre_grasp_position, rxryrz, approach_vector = process_pose(pose_obj_to_cam, T_cam_to_gripper, ROBOT_Z, 0.120, 0.06, True)
 
                     #Pad value
                     pre_grasp_position = pre_grasp_position*1000.0 #Scale to mm
                     approach_vector = approach_vector*1000.0
 
                     pre_grasp_position = np.pad(pre_grasp_position, (0, 8 - len(pre_grasp_position)), mode='constant')
-                    
+                    pre_grasp_position[0] = 0.0
 
                     rx_only = rxryrz[0]
                     #gripper_delta_y_compensate = np.sign(rx_only)*GRIPPER_WIDTH/2

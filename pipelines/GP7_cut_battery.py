@@ -150,11 +150,11 @@ def visualise_seam(rgb_data : np.ndarray, depth_data : np.ndarray, seam : Seam, 
     # Format left 3D coordinate text (Converting meters to mm for readability)
     if seam.p3d_left is not None and seam.p3d_right is not None:
         left_str = f"L: ({seam.p3d_left[0]:.0f}, {seam.p3d_left[1]:.0f}, {seam.p3d_left[2]:.0f})mm"
-        cv2.putText(vis, left_str, (seam.x_cut_left - 180, seam.y_cut - 8),
+        cv2.putText(vis, left_str, (seam.x_cut_left - 50, seam.y_cut - 8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 100, 255), 1)
 
         right_str = f"R: ({seam.p3d_right[0]:.0f}, {seam.p3d_right[1]:.0f}, {seam.p3d_right[2]:.0f})mm"
-        cv2.putText(vis, right_str, (seam.x_cut_right + 10, seam.y_cut - 8),
+        cv2.putText(vis, right_str, (seam.x_cut_right - 10, seam.y_cut - 8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 100, 255), 1)
     print(f"\r[{seam.roi.mode_label}]  "
                   f"seam={seam.y_seam}  cut={seam.y_cut}",

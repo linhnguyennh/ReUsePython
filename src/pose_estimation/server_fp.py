@@ -26,7 +26,7 @@ class StreamServerWebSocket:
         self.display_queue = Queue(maxsize=1)
         self.frame_queue   = Queue(maxsize=1)
         self.pose_queue = Queue(maxsize=1)
-
+        self._last_pose = None
         self._websocket = None
 
         @asynccontextmanager
@@ -65,7 +65,13 @@ class StreamServerWebSocket:
                     except Empty:
                         pass
                 self.frame_queue.put_nowait(decoded)
-
+                # --- Feed display independently, pose=None until pose loop updates it ---
+                self._push_display(
+                    decoded.get("rgb"),
+                    decoded.get("depth"),
+                    decoded.get("mask"),
+                    self._last_pose,   # show last known pose, or None
+                )
         except WebSocketDisconnect:
             logger.info("Client disconnected")
             self._websocket = None
@@ -114,6 +120,7 @@ class StreamServerWebSocket:
 
                         if pose_candidate is not None and not np.isnan(pose_candidate).any():
                             pose = pose_candidate
+                            self._last_pose = pose #Cache for display
                             logger.info("Registration done")
 
                     except Exception as e:
@@ -128,7 +135,7 @@ class StreamServerWebSocket:
 
                         if pose_candidate is not None and not np.isnan(pose_candidate).any():
                             pose = pose_candidate
-
+                            self._last_pose = pose
                     except Exception as e:
                         logger.error(f"Tracking error: {e}")
 
@@ -150,10 +157,11 @@ class StreamServerWebSocket:
                         logger.info(f"Pose matrix: {pose}")
             else:
                 self.estimator._initialized = False
+                self._last_pose = None
             # -------------------------
             # Push to display (RAW DATA ONLY)
             # -------------------------
-            self._push_display(rgb, depth, mask, pose)
+            # self._push_display(rgb, depth, mask, pose)
 
     async def _pose_sender(self):
         while True:
