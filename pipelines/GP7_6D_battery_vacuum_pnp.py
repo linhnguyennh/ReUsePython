@@ -15,6 +15,8 @@ from src.utils.logger_helper import log_title
 from src.pose.pose_process_fn import *
 from src.communication.opcua.opcua_client import PLCClient, PLCInterface, PLCNodeMap, OPCUAClient
 from config.vectors_matrices import T_CAM_TO_GRIPPER_GP7_ONHAND
+from config.gp7_6D_config import ENABLE_PLC_CONNECTION
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -143,15 +145,17 @@ def main():
     pose_queue = ws_client.pose_queue
 
     #OPCUA CLIENTS
-    plc_url = "opc.tcp://192.168.0.1:4840"
-    plc_client = OPCUAClient(plc_url)
+    if ENABLE_PLC_CONNECTION:
+        plc_url = "opc.tcp://192.168.0.1:4840"
+        plc_client = OPCUAClient(plc_url)
 
-    #Generate node map from yaml
-    node_map = PLCNodeMap(plc_client, r"C:\Users\lin40269\Desktop\Linh (Desktop)\01_Python\realsense\config\plc_opcua_nodes.yaml")
-    
-    #Python to PLC interface for setting and getting of variables
-    plc_io = PLCInterface(node_map,plc_client)
-
+        #Generate node map from yaml
+        node_map = PLCNodeMap(plc_client, r"C:\Users\lin40269\Desktop\Linh (Desktop)\01_Python\realsense\config\plc_opcua_nodes.yaml")
+        
+        #Python to PLC interface for setting and getting of variables
+        plc_io = PLCInterface(node_map,plc_client)
+    else:
+        plc_client = None
     #START THREADS
     rs_stream.start()
     segmentor.start()
@@ -166,46 +170,49 @@ def main():
     running = True
     try:
         while running:
-            state_motion = MotionState(plc_io.get_state_motion())
-            match state_motion:
-                case MotionState.IDLE:
-                    try:
-                        pose_obj_to_cam = pose_queue.get(timeout=0.5)
-                    except Empty:
-                        continue
+            if ENABLE_PLC_CONNECTION:
 
-                    pre_grasp_position, rxryrz, approach_vector = process_pose(pose_obj_to_cam, T_cam_to_gripper, ROBOT_Z, 0.120, 0.06, True)
+                state_motion = MotionState(plc_io.get_state_motion())
+                match state_motion:
+                    case MotionState.IDLE:
+                        try:
+                            pose_obj_to_cam = pose_queue.get(timeout=0.5)
+                        except Empty:
+                            continue
 
-                    #Pad value
-                    pre_grasp_position = pre_grasp_position*1000.0 #Scale to mm
-                    approach_vector = approach_vector*1000.0
+                        pre_grasp_position, rxryrz, approach_vector = process_pose(pose_obj_to_cam, T_cam_to_gripper, ROBOT_Z, 0.120, 0.06, True)
 
-                    pre_grasp_position = np.pad(pre_grasp_position, (0, 8 - len(pre_grasp_position)), mode='constant')
-                    pre_grasp_position[0] = 0.0
+                        #Pad value
+                        pre_grasp_position = pre_grasp_position*1000.0 #Scale to mm
+                        approach_vector = approach_vector*1000.0
 
-                    rx_only = rxryrz[0]
-                    #gripper_delta_y_compensate = np.sign(rx_only)*GRIPPER_WIDTH/2
-                    wrist_rotation = np.zeros(8)
+                        pre_grasp_position = np.pad(pre_grasp_position, (0, 8 - len(pre_grasp_position)), mode='constant')
+                        pre_grasp_position[0] = 0.0
 
-                    #wrist_rotation[1] = gripper_delta_y_compensate
-                    wrist_rotation[3] = rx_only
+                        rx_only = rxryrz[0]
+                        #gripper_delta_y_compensate = np.sign(rx_only)*GRIPPER_WIDTH/2
+                        wrist_rotation = np.zeros(8)
 
-                    approach_vector[0] = 0.0 #X to zero
-                    approach_vector[1] = 0.0 #Y to zero
+                        #wrist_rotation[1] = gripper_delta_y_compensate
+                        wrist_rotation[3] = rx_only
 
-                    approach_vector = np.pad(approach_vector, (0, 8 - len(approach_vector)), mode='constant')
-                    if plc_io.get_bool_6D_pose_data():
-                        plc_io.set_pregrasp_tcp(pre_grasp_position.tolist())
-                        logger.info("PREGRASP SENT")
-                        plc_io.set_wrist_rotation_tcp(wrist_rotation.tolist())
-                        logger.info("WRIST ROTATION SENT")
-                        plc_io.set_approach_tcp(approach_vector.tolist())
-                    time.sleep(2)
+                        approach_vector[0] = 0.0 #X to zero
+                        approach_vector[1] = 0.0 #Y to zero
+
+                        approach_vector = np.pad(approach_vector, (0, 8 - len(approach_vector)), mode='constant')
+                        if plc_io.get_bool_6D_pose_data():
+                            plc_io.set_pregrasp_tcp(pre_grasp_position.tolist())
+                            logger.info("PREGRASP SENT")
+                            plc_io.set_wrist_rotation_tcp(wrist_rotation.tolist())
+                            logger.info("WRIST ROTATION SENT")
+                            plc_io.set_approach_tcp(approach_vector.tolist())
+                        time.sleep(2)
 
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt triggered...")
-        plc_client.stop_communication()
+        if plc_client is not None:
+            plc_client.stop_communication()
         segmentor.stop()
         rs_stream.stop()
         ws_client_thread.join()

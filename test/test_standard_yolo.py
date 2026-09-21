@@ -1,5 +1,5 @@
 from ultralytics import YOLO
-import config
+import config.config as config
 import json
 
 if __name__ == "__main__":
